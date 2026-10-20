@@ -1,0 +1,163 @@
+[project]
+name = "esims-backend"
+version = "0.1.0"
+description = "Electronics Store Inventory Management System - backend"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.importlinter]
+root_package = "app"
+
+# Module dependency order. A module may import only from modules listed below
+# it ("a | b" are independent siblings). This also rules out cycles.
+[[tool.importlinter.contracts]]
+name = "Modules form an acyclic layered structure"
+type = "layers"
+containers = ["app.modules"]
+layers = [
+    "reporting",
+    "sales | purchasing",
+    "stock",
+    "product",
+    "notifications",
+    "auth",
+    "audit",
+]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside product uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.product._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside stock uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.stock._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside sales uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.sales._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside reporting uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.reporting._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside auth uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.auth._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside purchasing uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.notifications",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.purchasing._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside notifications uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.audit",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.notifications._internal"]
+
+[[tool.importlinter.contracts]]
+name = "Nothing outside audit uses its internals"
+type = "forbidden"
+source_modules = [
+    "app.modules.product",
+    "app.modules.stock",
+    "app.modules.sales",
+    "app.modules.reporting",
+    "app.modules.auth",
+    "app.modules.purchasing",
+    "app.modules.notifications",
+    "app.main",
+    "app.api",
+]
+forbidden_modules = ["app.modules.audit._internal"]
