@@ -20,6 +20,15 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      LOCKOUT_THRESHOLD: ${LOCKOUT_THRESHOLD:-5}
+      LOCKOUT_MINUTES: ${LOCKOUT_MINUTES:-15}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+      APP_BASE_URL: http://localhost:${FRONTEND_PORT:-5173}
+      # Password reset emails go to Mailpit; read them at http://localhost:8025.
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_STARTTLS: "false"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -27,6 +36,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
 
   frontend:
     build: ./frontend

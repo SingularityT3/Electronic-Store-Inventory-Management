@@ -17,6 +17,7 @@ docker compose up --build
 - Frontend: http://localhost:5173
 - API health check: http://localhost:8000/api/health
 - API docs: http://localhost:8000/docs
+- Mailpit (catches outgoing email, e.g. password reset links): http://localhost:8025
 
 ## Database
 

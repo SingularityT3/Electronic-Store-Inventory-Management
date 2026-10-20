@@ -58,6 +58,19 @@ A reference to a higher module's table is a plain ID column (e.g. `users.locatio
 `stock` owns locations). Migrations are in `backend/migrations/` (Alembic). Ownership, the
 ER diagram and the rules enforced in the database are in [`schema.md`](schema.md).
 
+## Authentication
+
+Sessions are server-side (`user_sessions`): the browser holds a random token in an HttpOnly,
+SameSite=Strict cookie, and every request checks it against the idle timeout, the absolute
+lifetime and the account status (SRS A-12). `app/main.py` mounts every module router with the
+`current_user` dependency from `app.modules.auth`, so new routes require a signed-in user by
+default. Only `/api/health` and the login, logout and password reset routes are public.
+A route that needs the user takes `user: Annotated[CurrentUser, Depends(current_user)]`.
+Role checks are #6.
+
+Modules write audit entries with `audit_service.record(db, ...)` from `app.modules.audit`, in
+the same transaction as the change they describe.
+
 ## Configuration
 
 All settings come from environment variables (`backend/app/config.py`), with `ENV` selecting
@@ -70,4 +83,4 @@ backend.
 
 ## Out of scope for the skeleton
 
-CI and deployment config (#3), UI shell (#4), authentication (#5).
+UI shell (#4).

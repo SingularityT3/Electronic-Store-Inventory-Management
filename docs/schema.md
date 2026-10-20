@@ -28,7 +28,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | Module          | Tables                                                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `audit`         | `audit_log`                                                                                                            |
-| `auth`          | `roles`, `users`                                                                                                       |
+| `auth`          | `roles`, `users`, `user_sessions`, `password_reset_tokens`                                                             |
 | `notifications` | `notifications`                                                                                                        |
 | `product`       | `categories`, `products`, `product_variants`, `product_images`                                                         |
 | `stock`         | `locations`, `stock_levels`, `item_costs`, `batches`, `serial_numbers`, `stock_movements`, `stock_transfers`           |
@@ -51,6 +51,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | Damaged returns are not restocked (FR-4.2)          | `CHECK` on `return_lines`                                                                 |
 | Staff and Cashier have a location (A-9)             | `CHECK` on `users`                                                                        |
 | Case-insensitive unique username                    | Unique index on `lower(username)`                                                         |
+| Sessions and reset tokens end with their user       | `ON DELETE CASCADE` from `user_sessions` and `password_reset_tokens` to `users`. Both store only a SHA-256 of the token. |
 | Append-only audit log and price history (NFR-8, FR-3.4) | Trigger `reject_modification` rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` and `supplier_price_history` |
 
 Notes:

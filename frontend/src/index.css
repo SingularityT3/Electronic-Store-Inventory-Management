@@ -1,0 +1,64 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1f2937;
+  background: #f3f4f6;
+}
+
+body {
+  margin: 0;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+.auth-card {
+  width: 22rem;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+}
+
+.auth-card h1,
+.auth-card p {
+  margin: 0;
+}
+
+.auth-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.auth-card input,
+.auth-card button {
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.home header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1.5rem;
+  background: #fff;
+}
+
+.home header span {
+  margin-left: auto;
+}
+
+.loading {
+  padding: 2rem;
+}
