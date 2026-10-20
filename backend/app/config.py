@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     env: Literal["dev", "test", "prod"] = "dev"
     database_url: str = ""
     cors_origins: str = ""
+    # Password given to the sample users by `python -m scripts.seed`.
+    seed_user_password: str = ""
 
 
 @lru_cache

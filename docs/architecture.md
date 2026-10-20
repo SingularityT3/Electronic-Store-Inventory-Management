@@ -50,6 +50,14 @@ Rules 1 and 2 are enforced by [import-linter](https://import-linter.readthedocs.
 `backend/pyproject.toml`, run as part of the test suite (`tests/test_architecture.py`). Changing
 the layer order means editing that file and this document together.
 
+## Database
+
+Each module owns its tables, defined in `_internal/models.py`. Rule 1 applies to them: no other
+module reads or writes them. Foreign keys across modules follow rule 2 and point downward only.
+A reference to a higher module's table is a plain ID column (e.g. `users.location_id`, since
+`stock` owns locations). Migrations are in `backend/migrations/` (Alembic). Ownership, the
+ER diagram and the rules enforced in the database are in [`schema.md`](schema.md).
+
 ## Configuration
 
 All settings come from environment variables (`backend/app/config.py`), with `ENV` selecting
@@ -62,4 +70,4 @@ backend.
 
 ## Out of scope for the skeleton
 
-Database schema and migrations (#2), CI and deployment config (#3), UI shell (#4), authentication (#5).
+CI and deployment config (#3), UI shell (#4), authentication (#5).

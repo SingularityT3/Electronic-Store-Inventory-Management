@@ -11,7 +11,10 @@ Everything runs in Docker. Do not install anything on the host (no pip/npm). `RE
 ```bash
 docker compose run --rm --no-deps backend pytest tests/test_health.py::test_health_returns_ok   # single backend test
 docker compose run --rm --no-deps frontend npm test -- src/App.test.tsx                         # single frontend test
+docker compose run --rm --user $(id -u):$(id -g) backend alembic revision --autogenerate -m "<change>"   # new migration, owned by you
 ```
+
+Tests using the `conn`/`migrated_engine`/`empty_db_url` fixtures (`tests/conftest.py`) need the `db` service, so omit `--no-deps` for them. They run on throwaway databases, never the dev one.
 
 After changing `frontend/package.json`, regenerate the lockfile in a container (the image uses `npm ci`), then rebuild the image:
 `docker run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v $PWD/frontend:/app -w /app node:22-alpine npm install`
@@ -23,6 +26,7 @@ Rationale and module list: `docs/architecture.md`. The part that needs enforcing
 - Each module under `backend/app/modules/` exposes only `__init__.py` / `service.py` (a `Protocol`) to other modules; `_internal/` is private. Modules never touch another module's tables.
 - Dependencies point downward only: `reporting` > `sales | purchasing` > `stock` > `product` > `notifications` > `auth` > `audit`. A lower module that must react to a higher one (e.g. stock raising low-stock alerts) goes through `notifications`.
 - import-linter contracts in `backend/pyproject.toml` enforce this, and `tests/test_architecture.py` runs them in pytest. When adding a module or changing the order, update the `layers` contract, add a matching "Nothing outside X uses its internals" contract, and update `docs/architecture.md`.
+- Tables live in the owning module's `_internal/models.py` on `app.db.Base`. Register new model files in `backend/migrations/models.py`. Cross-module foreign keys point downward only and use string targets (`ForeignKey("products.id")`). Upward references are plain ID columns, and no ORM relationships cross modules. Autogenerate omits triggers, functions, sequences and data, so write those by hand. `tests/test_migrations.py` fails if models and migrations drift. See `docs/schema.md`.
 - Config is environment variables only (`backend/app/config.py`); `.env.example` is the reference. The Vite dev server proxies `/api` to the backend.
 
 ## Workflow
