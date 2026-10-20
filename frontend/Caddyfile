@@ -1,0 +1,23 @@
+# SITE_ADDRESS is a public domain name (certificate from Let's Encrypt automatically), or
+# "localhost" / an internal host name (certificate from Caddy's own CA). Plain HTTP is redirected
+# to HTTPS.
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+	}
+}

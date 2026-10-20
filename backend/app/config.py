@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     env: Literal["dev", "test", "prod"] = "dev"
     database_url: str = ""
     cors_origins: str = ""
+    # Session cookies are HTTPS-only; turn off only for plain-HTTP local development.
+    cookie_secure: bool = True
     # Password given to the sample users by `python -m scripts.seed`.
     seed_user_password: str = ""
 
