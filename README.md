@@ -18,10 +18,26 @@ docker compose up --build
 - API health check: http://localhost:8000/api/health
 - API docs: http://localhost:8000/docs
 
-## Test and lint
+## Database
+
+Create the schema, then optionally load sample data (locations, categories, products, stock,
+suppliers, and the users `admin`, `manager`, `staff` and `cashier`, whose password is
+`SEED_USER_PASSWORD` from `.env`):
 
 ```bash
-docker compose run --rm --no-deps backend pytest
+docker compose run --rm backend alembic upgrade head
+docker compose run --rm backend python -m scripts.seed
+```
+
+The schema and the rules it enforces are in [`docs/schema.md`](docs/schema.md).
+
+## Test and lint
+
+Backend tests need the database (they create and drop their own throwaway databases), so that
+command starts `db`:
+
+```bash
+docker compose run --rm backend pytest
 docker compose run --rm --no-deps backend ruff check .
 docker compose run --rm --no-deps backend ruff format --check .
 docker compose run --rm --no-deps backend lint-imports
@@ -35,9 +51,9 @@ docker compose run --rm --no-deps frontend npm run build
 ## Layout
 
 ```
-backend/    FastAPI app (app/modules/<module>/ ...), tests/, pyproject.toml
+backend/    FastAPI app (app/modules/<module>/ ...), migrations/, scripts/seed.py, tests/
 frontend/   React app (src/modules/ mirrors the backend modules)
-docs/       Architecture notes
+docs/       Architecture and schema notes
 Documents/  SRS, security requirements, test plan, use cases
 ```
 
