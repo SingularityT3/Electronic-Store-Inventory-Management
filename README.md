@@ -48,12 +48,17 @@ docker compose run --rm --no-deps frontend npm run build
 
 `ruff format .` and `npm run format` apply formatting.
 
+## Deploy
+
+Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md).
+CI runs lint, tests and builds on every pull request.
+
 ## Layout
 
 ```
 backend/    FastAPI app (app/modules/<module>/ ...), migrations/, scripts/seed.py, tests/
 frontend/   React app (src/modules/ mirrors the backend modules)
-docs/       Architecture and schema notes
+docs/       Architecture, schema and deployment notes
 Documents/  SRS, security requirements, test plan, use cases
 ```
 

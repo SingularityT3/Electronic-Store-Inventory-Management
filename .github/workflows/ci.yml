@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose build backend
+      - run: docker compose run --rm --no-deps backend ruff check .
+      - run: docker compose run --rm --no-deps backend ruff format --check .
+      - run: docker compose run --rm --no-deps backend lint-imports
+      - run: docker compose run --rm backend pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose build frontend
+      - run: docker compose run --rm --no-deps frontend npm run lint
+      - run: docker compose run --rm --no-deps frontend npm test
+      - run: docker compose run --rm --no-deps frontend npm run build
+
+  production-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.prod.example .env.prod
+      - run: docker compose -f docker-compose.prod.yml --env-file .env.prod config --quiet
+        env:
+          POSTGRES_PASSWORD: ci
+          DATABASE_URL: postgresql://esims:ci@db:5432/esims
+      - run: docker compose -f docker-compose.prod.yml --env-file .env.prod build
+        env:
+          POSTGRES_PASSWORD: ci
+          DATABASE_URL: postgresql://esims:ci@db:5432/esims

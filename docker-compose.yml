@@ -19,6 +19,7 @@ services:
       ENV: ${ENV:-dev}
       DATABASE_URL: ${DATABASE_URL}
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
