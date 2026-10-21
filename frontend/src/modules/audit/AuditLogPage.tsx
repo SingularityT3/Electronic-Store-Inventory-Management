@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import { api, ApiError } from '../../api';
 import { can, useAuth } from '../auth';
+import { AccessDenied } from '../../shell/components';
 
 export interface AuditEntry {
   id: number;
@@ -128,15 +128,7 @@ export default function AuditLogPage() {
   }, [allowed, filters, offset]);
 
   if (!allowed) {
-    return (
-      <main className="page">
-        <h1>Audit log</h1>
-        <p role="alert" className="error">
-          You do not have permission to view the audit log.
-        </p>
-        <Link to="/">Back to dashboard</Link>
-      </main>
-    );
+    return <AccessDenied what="the audit log" />;
   }
 
   const badRange = draft.from !== '' && draft.to !== '' && draft.from > draft.to;
@@ -160,10 +152,9 @@ export default function AuditLogPage() {
   });
 
   return (
-    <main className="page">
+    <div className="page">
       <header className="page-header">
         <h1>Audit log</h1>
-        <Link to="/">Back to dashboard</Link>
       </header>
 
       <form className="audit-filters" onSubmit={apply} aria-label="Filter audit log">
@@ -281,6 +272,6 @@ export default function AuditLogPage() {
           </nav>
         </>
       )}
-    </main>
+    </div>
   );
 }

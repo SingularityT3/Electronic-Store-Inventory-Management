@@ -47,24 +47,8 @@ body {
   color: #b91c1c;
 }
 
-.home header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0 1.5rem;
-  background: #fff;
-}
-
-.home header span {
-  margin-left: auto;
-}
-
 .loading {
   padding: 2rem;
-}
-
-.home-links {
-  padding: 1rem 1.5rem;
 }
 
 .page {
@@ -129,4 +113,267 @@ body {
   align-items: center;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+/* ---- Desktop shell (#4): header, sidebar, content ---- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -3rem;
+  z-index: 30;
+  padding: 0.5rem 0.75rem;
+  background: #fff;
+  color: #1e3a8a;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.shell {
+  min-width: 64rem;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  grid-template-rows: 3.5rem 1fr;
+  grid-template-areas:
+    'header header'
+    'sidebar content';
+}
+
+.shell-header {
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  background: #1e293b;
+  color: #fff;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+}
+
+.brand-sub {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: #cbd5e1;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-button {
+  padding: 0.4rem 0.75rem;
+  font-size: 1rem;
+  color: #fff;
+  background: transparent;
+  border: 1px solid #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.header-button:hover {
+  background: #334155;
+}
+
+.popover {
+  position: relative;
+}
+
+.popover-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  min-width: 14rem;
+  padding: 0.75rem;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+
+.popover-panel p {
+  margin: 0 0 0.5rem;
+}
+
+.user-menu [role='menuitem'] {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 1rem;
+  text-align: left;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  padding: 1rem 0.75rem;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+}
+
+.sidebar ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-group {
+  margin-top: 1rem;
+}
+
+.nav-group-title {
+  margin: 0 0 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+
+.sidebar-link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: #1f2937;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.sidebar-link:hover {
+  background: #f3f4f6;
+}
+
+.sidebar-link.active {
+  font-weight: 600;
+  color: #1e3a8a;
+  background: #dbeafe;
+}
+
+.shell-content {
+  grid-area: content;
+  min-width: 0;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* ---- Shared components ---- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+}
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: #4b5563;
+  background: #fff;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.form-field [aria-invalid='true'] {
+  border-color: #b91c1c;
+}
+
+.form-field p {
+  margin: 0;
+}
+
+.form-hint {
+  color: #4b5563;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.4);
+}
+
+.dialog {
+  width: 24rem;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+}
+
+.dialog h2 {
+  margin: 0 0 0.5rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.dialog-actions button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+}
+
+.dialog-actions .danger {
+  color: #fff;
+  background: #b91c1c;
+  border: 1px solid #b91c1c;
 }

@@ -121,6 +121,16 @@ All settings come from environment variables (`backend/app/config.py`), with `EN
 `frontend/src/modules/` mirrors the backend modules. In development, Vite proxies `/api` to the
 backend.
 
-## Out of scope for the skeleton
+`frontend/src/shell/` is the desktop UI shell (NFR-9, NFR-10) that every signed-in screen renders
+in: a header (brand, notification bell placeholder, user menu with Sign out), a sidebar menu and
+the content area, plus shared components in `shell/components/` (`DataTable`, `FormField`,
+`EmptyState`, `ConfirmDialog`, `AccessDenied`, `RequirePermission`).
 
-UI shell (#4).
+The menu is built from `NAV_ITEMS` in `shell/navigation.ts`: each item names the permission it
+needs, and the sidebar shows an item only if the server-sent `permissions` of the signed-in user
+include it, so each role sees exactly its screens (FR5.1-IT-3). Menu hiding is cosmetic. Every
+item's route, and any sub-route under it, is also wrapped in `RequirePermission`, which shows the
+access-denied page for a URL typed by hand; the API enforces the same rule with a 403 (NFR-7).
+
+To add a screen, give its feature module a page component and replace the `PlaceholderPage` for
+its path in `App.tsx`. A new menu item is one entry in `NAV_ITEMS`.
