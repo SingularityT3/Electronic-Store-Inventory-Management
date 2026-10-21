@@ -16,15 +16,20 @@ export async function api<T = void>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
+  const body = options.body;
+  const isFormData = body instanceof FormData;
   const response = await fetch(`/api${path}`, {
-    method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+    method: options.method ?? (body === undefined ? 'GET' : 'POST'),
     credentials: 'same-origin',
-    headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    headers: body === undefined || isFormData ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    const detail = typeof data.detail === 'string' ? data.detail : 'Something went wrong';
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : JSON.stringify(data.detail ?? 'Something went wrong');
     if (response.status === 401 && !path.startsWith('/auth/login')) {
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }

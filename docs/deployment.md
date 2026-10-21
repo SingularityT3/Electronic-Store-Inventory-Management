@@ -54,8 +54,13 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `CORS_ORIGINS`      | Leave empty; the SPA and API share one origin.                                             |
 | `LOCKOUT_*`, `SESSION_*` | Login lockout and session timeouts (SRS A-12). Defaults: 5 failures lock for 15 minutes; sessions end after 30 idle minutes or 12 hours. |
 | `SMTP_*`            | Mail server for password reset links. If `SMTP_HOST` is empty, reset emails are not sent and an Admin must reset passwords (#7). |
+| `PRODUCT_IMAGE_MAX_BYTES` | Maximum upload size in bytes; defaults to 5 MiB, and must be at least 2 MiB for the required product-image test. |
 
 Never commit `.env.prod` (it is git-ignored).
+
+Product images are persisted in the `product-images` Docker volume mounted at
+`/data/product-images` in the backend. Keep this volume when restarting or replacing the
+containers; it is separate from the PostgreSQL `db-data` volume.
 
 ## Cloud target: a VM on any provider (AWS EC2, DigitalOcean, Azure VM, ...)
 

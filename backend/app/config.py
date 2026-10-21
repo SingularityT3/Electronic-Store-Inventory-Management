@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_from: str = "ESIMS <no-reply@esims.local>"
 
+    product_image_dir: str = "/data/product-images"
+    product_image_max_bytes: int = 5 * 1024 * 1024
+
 
 @lru_cache
 def get_settings() -> Settings:

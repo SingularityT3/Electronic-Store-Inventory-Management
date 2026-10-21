@@ -33,6 +33,7 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - product-images:/data/product-images
     depends_on:
       db:
         condition: service_healthy
@@ -56,3 +57,4 @@ services:
 
 volumes:
   db-data:
+  product-images:

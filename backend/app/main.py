@@ -10,10 +10,12 @@ from app.modules.auth import Permission, current_user, ensure_routes_authorized,
 from app.modules.auth.router import router as auth_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.product.router import router as product_router
+from app.modules.product.router import set_stock_checker
 from app.modules.purchasing.router import router as purchasing_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.sales.router import router as sales_router
 from app.modules.stock.router import router as stock_router
+from app.modules.stock.service import has_stock
 
 # Routes anyone may call. Every other route must declare a permission (SEC-AZ-1).
 PUBLIC_PATHS = {
@@ -37,6 +39,7 @@ async def no_store(
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ESIMS")
+    set_stock_checker(has_stock)
     app.middleware("http")(no_store)
     api = APIRouter(prefix="/api")
     # Public: health check, and the auth routes (each protects itself as needed).
