@@ -55,6 +55,7 @@ class User(Base):
 
     __table_args__ = (
         Index("uq_users_username_lower", func.lower(username), unique=True),
+        Index("uq_users_email_lower", func.lower(email), unique=True),
         Index("ix_users_role", "role"),
         CheckConstraint(
             "role NOT IN ('staff', 'cashier') OR location_id IS NOT NULL",

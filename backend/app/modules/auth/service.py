@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from sqlalchemy.orm import Session
+
 
 class Permission(StrEnum):
     """What a role may do (FR-5.1, SEC-AZ-1). Routes declare one with `require(...)`.
@@ -56,3 +58,9 @@ class AuthService(Protocol):
     never on `_internal`. Routes get the signed-in user from the `current_user`
     dependency exported by this module.
     """
+
+
+class LocationValidator(Protocol):
+    """Composition-root supplied validation for stock-owned locations."""
+
+    def __call__(self, db: Session, location_id: int) -> bool: ...

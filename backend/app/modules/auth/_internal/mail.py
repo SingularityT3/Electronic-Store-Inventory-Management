@@ -9,7 +9,14 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 
-def send_reset_email(settings: Settings, to: str, link: str) -> None:
+def send_reset_email(
+    settings: Settings,
+    to: str,
+    link: str,
+    *,
+    subject: str = "Reset your ESIMS password",
+    introduction: str = "A password reset was requested for your ESIMS account.",
+) -> None:
     """Send a reset link. Failures are logged (without the link) and not raised."""
     if not settings.smtp_host:
         logger.warning("SMTP_HOST is not set; password reset email was not sent")
@@ -17,9 +24,9 @@ def send_reset_email(settings: Settings, to: str, link: str) -> None:
     message = EmailMessage()
     message["From"] = settings.smtp_from
     message["To"] = to
-    message["Subject"] = "Reset your ESIMS password"
+    message["Subject"] = subject
     message.set_content(
-        "A password reset was requested for your ESIMS account.\n\n"
+        f"{introduction}\n\n"
         f"Open this link to choose a new password (valid for "
         f"{settings.password_reset_minutes} minutes, single use):\n\n{link}\n\n"
         "If you did not request this, ignore this email. Your password is unchanged."
