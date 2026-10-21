@@ -5,7 +5,7 @@ from typing import Protocol
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from app.modules.stock._internal.models import SerialNumber, StockLevel
+from app.modules.stock._internal.models import Location, SerialNumber, StockLevel
 
 
 class StockService(Protocol):
@@ -35,4 +35,12 @@ def has_stock(db: Session, product_id: int) -> bool:
                 )
             )
         )
+    )
+
+
+def location_exists(db: Session, location_id: int) -> bool:
+    """Validate a location without exposing the stock table to auth."""
+    return (
+        db.scalar(select(Location.id).where(Location.id == location_id, Location.is_active))
+        is not None
     )

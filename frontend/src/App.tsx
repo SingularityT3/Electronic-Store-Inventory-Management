@@ -1,6 +1,12 @@
 import { Route, Routes } from 'react-router-dom';
 import { AuditLogPage } from './modules/audit';
-import { ForgotPasswordPage, LoginPage, RequireAuth, ResetPasswordPage } from './modules/auth';
+import {
+  ForgotPasswordPage,
+  LoginPage,
+  RequireAuth,
+  ResetPasswordPage,
+  UsersPage,
+} from './modules/auth';
 import { ProductFormPage, ProductListPage, ProductViewPage } from './modules/product';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
@@ -57,7 +63,13 @@ export default function App() {
           // guard on any sub-page a feature adds later (e.g. /products/new).
           if (item.path === '/products') return [];
           const screen =
-            item.path === '/audit' ? <AuditLogPage /> : <PlaceholderPage title={item.label} />;
+            item.path === '/audit' ? (
+              <AuditLogPage />
+            ) : item.path === '/users' ? (
+              <UsersPage />
+            ) : (
+              <PlaceholderPage title={item.label} />
+            );
           const guarded = (
             <RequirePermission permission={item.permission} what={item.deniedLabel}>
               {screen}

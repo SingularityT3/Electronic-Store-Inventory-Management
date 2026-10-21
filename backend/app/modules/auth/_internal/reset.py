@@ -49,6 +49,21 @@ def request_reset(
     return ResetEmail(to=user.email, link=link)
 
 
+def create_invite(db: Session, user: User, settings: Settings, now: datetime) -> ResetEmail:
+    """Issue the same single-use reset link used for password setup invitations."""
+    token = new_token()
+    db.add(
+        PasswordResetToken(
+            token_hash=hash_token(token),
+            user_id=user.id,
+            created_at=now,
+            expires_at=now + timedelta(minutes=settings.password_reset_minutes),
+        )
+    )
+    link = f"{settings.app_base_url.rstrip('/')}/reset-password?token={token}"
+    return ResetEmail(to=user.email or "", link=link)
+
+
 def confirm_reset(db: Session, token: str, new_password: str, now: datetime) -> bool:
     """Set a new password if `token` is unused and unexpired.
 

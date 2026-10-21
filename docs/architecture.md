@@ -148,3 +148,18 @@ JPEG, PNG and WebP uploads are checked by magic bytes, assigned a random server-
 and limited by `PRODUCT_IMAGE_MAX_BYTES` (5 MiB by default). Files are stored in the
 `product-images` Docker volume and served only through authenticated API routes with
 `X-Content-Type-Options: nosniff`. Soft deletion retains image records and files for history.
+
+## User management
+
+Admins manage accounts through `/api/auth/users` (paged list, detail, create, edit,
+deactivate and reactivate), all guarded by `users.manage`. Creation stores an unusable
+password hash, issues the existing single-use, time-limited password-reset token, and
+emails only its setup link; the API never returns or audits a password or token. A
+deactivation is retained rather than hard-deleted, revokes all sessions immediately, and
+is recorded with the before/after active state. An Admin cannot disable or demote
+themselves or the last active Admin.
+
+Locations remain owned by `stock`. The stock module exposes an Admin-readable
+`/api/stock/locations` endpoint and a public service-level location validator; the
+composition root wires that validator into auth. Auth therefore validates location IDs
+without importing stock internals or touching stock tables.

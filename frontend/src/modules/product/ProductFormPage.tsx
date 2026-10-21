@@ -24,12 +24,12 @@ const EMPTY: FormValues = {
 
 function detailErrors(error: unknown): Record<string, string> {
   if (!(error instanceof ApiError)) return {};
-  try {
-    const detail = JSON.parse(error.message) as { field?: string; message?: string };
-    return detail.field && detail.message ? { [detail.field]: detail.message } : {};
-  } catch {
-    return {};
+  if (Object.keys(error.fields).length > 0 && 'field' in error.fields) {
+    const field = error.fields.field;
+    const message = error.fields.message;
+    return typeof field === 'string' && typeof message === 'string' ? { [field]: message } : {};
   }
+  return {};
 }
 
 export default function ProductFormPage() {
