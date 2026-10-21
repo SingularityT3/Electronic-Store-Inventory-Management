@@ -40,6 +40,17 @@ services:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      LOCKOUT_THRESHOLD: ${LOCKOUT_THRESHOLD:-5}
+      LOCKOUT_MINUTES: ${LOCKOUT_MINUTES:-15}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+      APP_BASE_URL: https://${SITE_ADDRESS:-localhost}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_FROM: ${SMTP_FROM:-ESIMS <no-reply@esims.local>}
     depends_on:
       migrate:
         condition: service_completed_successfully

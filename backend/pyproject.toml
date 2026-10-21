@@ -34,6 +34,8 @@ layers = [
     "audit",
 ]
 
+# Each module's internals may be imported only by that module. Imports through its public
+# surface (`__init__`, `router`) are fine, hence allow_indirect_imports.
 [[tool.importlinter.contracts]]
 name = "Nothing outside product uses its internals"
 type = "forbidden"
@@ -49,6 +51,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.product._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside stock uses its internals"
@@ -65,6 +68,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.stock._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside sales uses its internals"
@@ -81,6 +85,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.sales._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside reporting uses its internals"
@@ -97,6 +102,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.reporting._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside auth uses its internals"
@@ -113,6 +119,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.auth._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside purchasing uses its internals"
@@ -129,6 +136,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.purchasing._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside notifications uses its internals"
@@ -145,6 +153,7 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.notifications._internal"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Nothing outside audit uses its internals"
@@ -161,3 +170,4 @@ source_modules = [
     "app.api",
 ]
 forbidden_modules = ["app.modules.audit._internal"]
+allow_indirect_imports = true
