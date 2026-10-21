@@ -3,12 +3,36 @@ import { api, SESSION_EXPIRED_EVENT } from '../../api';
 
 export type Role = 'admin' | 'manager' | 'staff' | 'cashier';
 
+/** Mirrors the backend `Permission` enum (backend/app/modules/auth/service.py). */
+export type Permission =
+  | 'users.manage'
+  | 'audit.view'
+  | 'products.view'
+  | 'products.manage'
+  | 'stock.view'
+  | 'stock.adjust'
+  | 'stock.transfer'
+  | 'suppliers.manage'
+  | 'purchase_orders.manage'
+  | 'purchase_orders.receive'
+  | 'sales.record'
+  | 'returns.approve_late'
+  | 'reports.view'
+  | 'notifications.view';
+
 export interface User {
   id: number;
   username: string;
   full_name: string;
   role: Role;
   location_id: number | null;
+  /** What the user's role may do. The server enforces these; the UI only hides what is denied. */
+  permissions: Permission[];
+}
+
+/** Whether `user` may do `permission`, for showing or hiding menu items and actions. */
+export function can(user: User | null | undefined, permission: Permission): boolean {
+  return user?.permissions.includes(permission) ?? false;
 }
 
 interface AuthState {

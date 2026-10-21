@@ -1,7 +1,36 @@
 """Public service interface of the `auth` module."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
+
+
+class Permission(StrEnum):
+    """What a role may do (FR-5.1, SEC-AZ-1). Routes declare one with `require(...)`.
+
+    Which roles hold which permission is the matrix in `_internal/permissions.py`.
+    """
+
+    USERS_MANAGE = "users.manage"
+    AUDIT_VIEW = "audit.view"
+    PRODUCTS_VIEW = "products.view"
+    """Product search and listing."""
+    PRODUCTS_MANAGE = "products.manage"
+    """Create and edit products, categories and variants, including prices."""
+    STOCK_VIEW = "stock.view"
+    STOCK_ADJUST = "stock.adjust"
+    STOCK_TRANSFER = "stock.transfer"
+    SUPPLIERS_MANAGE = "suppliers.manage"
+    """Suppliers and supplier price history."""
+    PURCHASE_ORDERS_MANAGE = "purchase_orders.manage"
+    PURCHASE_ORDERS_RECEIVE = "purchase_orders.receive"
+    SALES_RECORD = "sales.record"
+    """Record sales and returns."""
+    RETURNS_APPROVE_LATE = "returns.approve_late"
+    """Approve a return older than 30 days (Manager override, SRS A-11)."""
+    REPORTS_VIEW = "reports.view"
+    """Reports and CSV/PDF exports."""
+    NOTIFICATIONS_VIEW = "notifications.view"
 
 
 @dataclass(frozen=True)
@@ -13,6 +42,11 @@ class CurrentUser:
     full_name: str
     role: str
     location_id: int | None
+
+    @property
+    def sees_all_locations(self) -> bool:
+        """Staff and Cashier see only their own location; Manager and Admin see all (SRS A-9)."""
+        return self.role in ("admin", "manager")
 
 
 class AuthService(Protocol):

@@ -65,8 +65,33 @@ SameSite=Strict cookie, and every request checks it against the idle timeout, th
 lifetime and the account status (SRS A-12). `app/main.py` mounts every module router with the
 `current_user` dependency from `app.modules.auth`, so new routes require a signed-in user by
 default. Only `/api/health` and the login, logout and password reset routes are public.
-A route that needs the user takes `user: Annotated[CurrentUser, Depends(current_user)]`.
-Role checks are #6.
+
+## Authorization (RBAC)
+
+Every route declares what it needs, and the server enforces it whatever the UI shows
+(FR-5.1, NFR-7, SEC-AZ-1/2). `app.modules.auth` exports:
+
+- `Permission`, the capabilities (`products.manage`, `stock.adjust`, ...). Which role holds
+  which is the matrix `ROLE_PERMISSIONS` in `auth/_internal/permissions.py` (SRS 2.3, A-5,
+  A-6, A-10). Admin holds all of them.
+- `require(Permission.X)`, a dependency for a route or a router. It gives the route the
+  signed-in user, or responds 403 and writes an `unauthorized_access_attempt` audit entry
+  ("Unauthorized Access Attempt", FR-5.3). A route that needs the user takes
+  `user: Annotated[CurrentUser, Depends(require(Permission.X))]`.
+- `signed_in`, the same for self-service routes open to every role (`/auth/me`).
+- `authorize(db, user, permission, "what")` for a check partway through a route, such as a
+  price change in a product edit (FR5.2-IT-2), and `authorize_location(db, user, location_id,
+  "what")` for SRS A-9: Staff and Cashier act on their own location only. Both deny the same
+  way, rolling back what the request changed so far.
+
+Access is denied by default: `create_app` calls `ensure_routes_authorized`, which refuses to
+start the app if a route outside `PUBLIC_PATHS` (`app/main.py`) has neither `require(...)` nor
+`signed_in`. The role is read from the database on every request, so a role change applies to
+the user's next request. `/auth/me` and the login response list the user's `permissions`; the
+frontend's `can(user, permission)` uses them to hide what the role cannot do, and its
+`Permission` type must be kept in step with the backend enum.
+
+## Audit log
 
 Modules write audit entries with `audit_service.record(db, ...)` from `app.modules.audit`, in
 the same transaction as the change they describe.

@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service
-from app.modules.auth._internal.dependencies import current_user, utcnow
+from app.modules.auth._internal.dependencies import utcnow
 from app.modules.auth._internal.login import LoginStatus, authenticate
 from app.modules.auth._internal.mail import send_reset_email
 from app.modules.auth._internal.models import User
+from app.modules.auth._internal.permissions import permissions_for, signed_in
 from app.modules.auth._internal.reset import confirm_reset, request_reset
 from app.modules.auth._internal.sessions import SESSION_COOKIE, create_session, revoke_session
-from app.modules.auth.service import CurrentUser
+from app.modules.auth.service import CurrentUser, Permission
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,6 +43,7 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     location_id: int | None
+    permissions: list[Permission]
 
 
 class ResetRequest(BaseModel):
@@ -64,6 +66,7 @@ def _user_out(user: User | CurrentUser) -> UserOut:
         full_name=user.full_name,
         role=user.role,
         location_id=user.location_id,
+        permissions=permissions_for(user.role),
     )
 
 
@@ -125,7 +128,7 @@ def logout(request: Request, response: Response, db: DbSession) -> None:
 
 
 @router.get("/me", responses={401: {"model": Message}})
-def me(user: Annotated[CurrentUser, Depends(current_user)]) -> UserOut:
+def me(user: Annotated[CurrentUser, Depends(signed_in)]) -> UserOut:
     return _user_out(user)
 
 

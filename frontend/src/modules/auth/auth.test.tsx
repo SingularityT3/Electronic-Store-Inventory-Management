@@ -3,9 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../App';
 import { api } from '../../api';
-import { AuthProvider } from '.';
+import { AuthProvider, can, type User } from '.';
 
-const RAVI = { id: 1, username: 'cashier_ravi', full_name: 'Ravi Kumar', role: 'cashier' };
+const RAVI: User = {
+  id: 1,
+  username: 'cashier_ravi',
+  full_name: 'Ravi Kumar',
+  role: 'cashier',
+  location_id: 1,
+  permissions: ['products.view', 'sales.record'],
+};
 
 /** A fake backend: one account, a session flag, and the auth routes. */
 function fakeBackend() {
@@ -103,4 +110,10 @@ test('a request rejected for an expired session sends the user to log in', async
   backend.signedIn = false;
   await act(() => expect(api('/auth/me')).rejects.toThrow());
   expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+});
+
+test('can() follows the permissions the server sent', () => {
+  expect(can(RAVI, 'sales.record')).toBe(true);
+  expect(can(RAVI, 'products.manage')).toBe(false);
+  expect(can(null, 'products.view')).toBe(false);
 });
