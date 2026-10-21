@@ -3,65 +3,21 @@
 Test plan cases FR5.2-UT-1..3, FR5.2-IT-1, FR5.2-IT-3, FR5.2-ST-1 and FR5.2-ST-2.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
-from fastapi.testclient import TestClient
 from sqlalchemy import Connection, text
-from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.db import get_session
 from app.main import app
 from app.modules.auth import current_user
-from app.modules.auth._internal.models import User
-from app.modules.auth._internal.passwords import hash_password
+from tests.helpers import PASSWORD, login
 
-PASSWORD = "correct-horse-battery"
 GENERIC_ERROR = "Invalid username or password"
-SETTINGS = Settings(cookie_secure=False, app_base_url="http://esims.test")
-
-
-@pytest.fixture
-def db(conn: Connection) -> Iterator[Session]:
-    """An ORM session in the test's transaction; commits become savepoints."""
-    with Session(bind=conn, join_transaction_mode="create_savepoint") as session:
-        yield session
-
-
-@pytest.fixture
-def client(db: Session) -> Iterator[TestClient]:
-    app.dependency_overrides[get_session] = lambda: db
-    app.dependency_overrides[get_settings] = lambda: SETTINGS
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def make_user(db: Session):
-    def make(username: str = "cashier_ravi", **fields: Any) -> User:
-        user = User(
-            username=username,
-            full_name="Ravi Kumar",
-            password_hash=hash_password(PASSWORD),
-            role="manager",
-            **fields,
-        )
-        db.add(user)
-        db.commit()
-        return user
-
-    return make
-
-
-def login(client: TestClient, username: str = "cashier_ravi", password: str = PASSWORD):
-    return client.post("/api/auth/login", json={"username": username, "password": password})
 
 
 def audit_actions(conn: Connection) -> list[str]:
@@ -79,7 +35,9 @@ def test_valid_credentials_log_in(client, make_user, conn):
         "full_name": "Ravi Kumar",
         "role": "manager",
         "location_id": None,
+        "permissions": response.json()["permissions"],
     }
+    assert "users.manage" not in response.json()["permissions"]
     assert client.get("/api/auth/me").json()["id"] == user.id
     assert audit_actions(conn) == ["login"]
 

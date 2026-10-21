@@ -8,13 +8,21 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import URL, Connection, Engine, create_engine, text
+from sqlalchemy.orm import Session
 
-from app.db import database_url
+from app.config import get_settings
+from app.db import database_url, get_session
+from app.main import app
+from app.modules.auth._internal.models import User
+from app.modules.auth._internal.passwords import hash_password
+from tests.helpers import PASSWORD, SETTINGS
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -68,3 +76,37 @@ def conn(migrated_engine: Engine) -> Iterator[Connection]:
         transaction = connection.begin()
         yield connection
         transaction.rollback()
+
+
+@pytest.fixture
+def db(conn: Connection) -> Iterator[Session]:
+    """An ORM session in the test's transaction; commits become savepoints."""
+    with Session(bind=conn, join_transaction_mode="create_savepoint") as session:
+        yield session
+
+
+@pytest.fixture
+def client(db: Session) -> Iterator[TestClient]:
+    app.dependency_overrides[get_session] = lambda: db
+    app.dependency_overrides[get_settings] = lambda: SETTINGS
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def make_user(db: Session):
+    def make(username: str = "cashier_ravi", **fields: Any) -> User:
+        fields.setdefault("role", "manager")
+        user = User(
+            username=username,
+            full_name="Ravi Kumar",
+            password_hash=hash_password(PASSWORD),
+            **fields,
+        )
+        db.add(user)
+        db.commit()
+        return user
+
+    return make

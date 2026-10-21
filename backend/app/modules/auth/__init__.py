@@ -5,6 +5,25 @@ Public surface of the `auth` module. Other modules may import from here only;
 """
 
 from app.modules.auth._internal.dependencies import current_user
-from app.modules.auth.service import AuthService, CurrentUser
+from app.modules.auth._internal.permissions import (
+    authorize,
+    authorize_location,
+    ensure_routes_authorized,
+    has_permission,
+    require,
+    signed_in,
+)
+from app.modules.auth.service import AuthService, CurrentUser, Permission
 
-__all__ = ["AuthService", "CurrentUser", "current_user"]
+__all__ = [
+    "AuthService",
+    "CurrentUser",
+    "Permission",
+    "authorize",
+    "authorize_location",
+    "current_user",
+    "ensure_routes_authorized",
+    "has_permission",
+    "require",
+    "signed_in",
+]
