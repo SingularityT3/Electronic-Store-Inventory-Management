@@ -51,6 +51,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | Damaged returns are not restocked (FR-4.2)          | `CHECK` on `return_lines`                                                                 |
 | Staff and Cashier have a location (A-9)             | `CHECK` on `users`                                                                        |
 | Case-insensitive unique username                    | Unique index on `lower(username)`                                                         |
+| Case-insensitive unique email                       | Unique index on `lower(email)`                                                           |
 | Sessions and reset tokens end with their user       | `ON DELETE CASCADE` from `user_sessions` and `password_reset_tokens` to `users`. Both store only a SHA-256 of the token. |
 | Append-only audit log and price history (NFR-8, FR-3.4) | Trigger `reject_modification` rejects `UPDATE`, `DELETE` and `TRUNCATE` on `audit_log` and `supplier_price_history` |
 

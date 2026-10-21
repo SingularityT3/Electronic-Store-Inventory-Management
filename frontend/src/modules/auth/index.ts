@@ -3,3 +3,4 @@ export { default as ForgotPasswordPage } from './ForgotPasswordPage';
 export { default as LoginPage } from './LoginPage';
 export { default as RequireAuth } from './RequireAuth';
 export { default as ResetPasswordPage } from './ResetPasswordPage';
+export { default as UsersPage } from './UsersPage';

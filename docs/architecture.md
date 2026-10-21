@@ -134,3 +134,18 @@ access-denied page for a URL typed by hand; the API enforces the same rule with 
 
 To add a screen, give its feature module a page component and replace the `PlaceholderPage` for
 its path in `App.tsx`. A new menu item is one entry in `NAV_ITEMS`.
+
+## User management
+
+Admins manage accounts through `/api/auth/users` (paged list, detail, create, edit,
+deactivate and reactivate), all guarded by `users.manage`. Creation stores an unusable
+password hash, issues the existing single-use, time-limited password-reset token, and
+emails only its setup link; the API never returns or audits a password or token. A
+deactivation is retained rather than hard-deleted, revokes all sessions immediately, and
+is recorded with the before/after active state. An Admin cannot disable or demote
+themselves or the last active Admin.
+
+Locations remain owned by `stock`. The stock module exposes an Admin-readable
+`/api/stock/locations` endpoint and a public service-level location validator; the
+composition root wires that validator into auth. Auth therefore validates location IDs
+without importing stock internals or touching stock tables.
