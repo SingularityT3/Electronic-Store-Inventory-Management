@@ -96,7 +96,8 @@ test('sign out returns to the login page', async () => {
   const backend = fakeBackend();
   backend.signedIn = true;
   renderAt('/');
-  await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await userEvent.click(await screen.findByRole('button', { name: /Ravi Kumar/ }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }));
   expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   expect(backend.signedIn).toBe(false);
 });
