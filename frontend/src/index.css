@@ -62,3 +62,71 @@ body {
 .loading {
   padding: 2rem;
 }
+
+.home-links {
+  padding: 1rem 1.5rem;
+}
+
+.page {
+  padding: 1rem 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.audit-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.audit-filters .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.audit-table th,
+.audit-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+}
+
+.audit-changes {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

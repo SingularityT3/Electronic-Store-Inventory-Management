@@ -36,5 +36,6 @@ class AuditLog(Base):
     __table_args__ = (
         Index("ix_audit_log_occurred_at", "occurred_at"),
         Index("ix_audit_log_user_id", "user_id"),
+        Index("ix_audit_log_username_lower", func.lower(username)),
         Index("ix_audit_log_action", "action"),
     )

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request, Response
 
 from app.api import health
 from app.modules.audit.router import router as audit_router
-from app.modules.auth import current_user, ensure_routes_authorized
+from app.modules.auth import Permission, current_user, ensure_routes_authorized, require
 from app.modules.auth.router import router as auth_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.product.router import router as product_router
@@ -50,9 +50,10 @@ def create_app() -> FastAPI:
         purchasing_router,
         reporting_router,
         notifications_router,
-        audit_router,
     ):
         api.include_router(router, dependencies=[Depends(current_user)])
+    # Admin only (SEC-AUD-4). `audit` sits below `auth`, so its router cannot declare this.
+    api.include_router(audit_router, dependencies=[Depends(require(Permission.AUDIT_VIEW))])
     app.include_router(api)
     ensure_routes_authorized(app.routes, PUBLIC_PATHS)
     return app

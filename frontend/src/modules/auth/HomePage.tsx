@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from './AuthContext';
+import { Link, useNavigate } from 'react-router-dom';
+import { can, useAuth } from './AuthContext';
 
 const ROLE_NAMES = { admin: 'Admin', manager: 'Manager', staff: 'Staff', cashier: 'Cashier' };
 
@@ -23,6 +23,11 @@ export default function HomePage() {
         </span>
         <button onClick={signOut}>Sign out</button>
       </header>
+      {can(user, 'audit.view') && (
+        <nav className="home-links">
+          <Link to="/audit">Audit log</Link>
+        </nav>
+      )}
     </main>
   );
 }
