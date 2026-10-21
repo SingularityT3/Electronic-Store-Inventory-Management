@@ -94,7 +94,22 @@ frontend's `can(user, permission)` uses them to hide what the role cannot do, an
 ## Audit log
 
 Modules write audit entries with `audit_service.record(db, ...)` from `app.modules.audit`, in
-the same transaction as the change they describe.
+the same transaction as the change they describe (FR-5.3, SEC-AUD-1). Every entry has the same
+fields: user, timestamp, module, action, the record it concerns, details, and `before`/`after`
+values. For an edit, `changes(old, new)` reduces two snapshots to the fields that changed, e.g.
+`({"price": "28999.00"}, {"price": "26999.00"})`. Values may be Decimals, dates or enums;
+they are stored as JSON strings. Never log passwords or tokens.
+
+Actions are snake_case verbs in the past tense, named after the record (`product_price_updated`,
+`stock_adjusted`, `po_created`); the viewer shows them as "Product price updated".
+
+The log is append-only (NFR-8, SEC-AUD-2): no service method or route edits or deletes an
+entry, for any role, and the `reject_modification` trigger rejects `UPDATE`, `DELETE` and
+`TRUNCATE` in the database. Admins read it at `/audit` in the frontend, through
+`GET /api/audit/entries` (filters: `username`, `action`, `module`, `since`, `until`; newest first,
+paged) and `GET /api/audit/filters`. `app/main.py` mounts the audit router behind
+`require(Permission.AUDIT_VIEW)`, because `audit` sits below `auth` and cannot import it
+(SEC-AUD-4).
 
 ## Configuration
 
