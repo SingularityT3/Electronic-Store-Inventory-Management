@@ -27,10 +27,23 @@ export async function api<T = void>(
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
+    const fields =
+      Array.isArray(data.detail)
+        ? Object.fromEntries(
+            data.detail
+              .filter((item: unknown) => typeof item === 'object' && item !== null)
+              .map((item: { loc?: unknown[]; msg?: unknown }) => [
+                String(item.loc?.at(-1) ?? ''),
+                String(item.msg ?? ''),
+              ]),
+          )
+        : typeof data.detail === 'object' && data.detail !== null
+          ? data.detail
+          : {};
     const detail =
       typeof data.detail === 'string'
         ? data.detail
-        : typeof data.detail === 'object' && data.detail !== null
+        : Array.isArray(data.detail) || (typeof data.detail === 'object' && data.detail !== null)
           ? 'Please correct the highlighted fields.'
           : 'Something went wrong';
     if (response.status === 401 && !path.startsWith('/auth/login')) {
@@ -39,7 +52,7 @@ export async function api<T = void>(
     throw new ApiError(
       response.status,
       detail,
-      typeof data.detail === 'object' && data.detail !== null ? data.detail : {},
+      fields,
     );
   }
   return (response.status === 204 ? undefined : await response.json()) as T;

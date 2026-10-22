@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { FormField } from '../../shell/components';
-import { productApi, type Category, type Product } from './api';
+import { productApi, type Category, type Product, type ProductImage } from './api';
 
 interface FormValues {
   name: string;
@@ -21,6 +21,7 @@ const EMPTY: FormValues = {
   price: '',
   description: '',
 };
+const MAX_IMAGE_BYTES = Number(import.meta.env.VITE_PRODUCT_IMAGE_MAX_BYTES ?? 5 * 1024 * 1024);
 
 function detailErrors(error: unknown): Record<string, string> {
   if (!(error instanceof ApiError)) return {};
@@ -34,6 +35,7 @@ function detailErrors(error: unknown): Record<string, string> {
 
 export default function ProductFormPage() {
   const { id } = useParams();
+  const location = useLocation();
   const editing = id !== undefined;
   const navigate = useNavigate();
   const [values, setValues] = useState<FormValues>(EMPTY);
@@ -43,6 +45,8 @@ export default function ProductFormPage() {
   const [message, setMessage] = useState('');
   const [imageError, setImageError] = useState('');
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [images, setImages] = useState<ProductImage[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     productApi
@@ -63,8 +67,20 @@ export default function ProductFormPage() {
           }),
         )
         .catch(() => setError('Could not load product.'));
+      productApi
+        .images(Number(id))
+        .then(setImages)
+        .catch(() => setError('Could not load product images.'));
     }
   }, [editing, id]);
+
+  useEffect(() => {
+    const state = location.state as { message?: string } | null;
+    if (state?.message) {
+      setMessage(state.message);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   function update(field: keyof FormValues, value: string) {
     setValues({ ...values, [field]: value });
@@ -81,9 +97,10 @@ export default function ProductFormPage() {
         ? await productApi.update(Number(id), body)
         : await productApi.create(body);
       if (!editing) {
-        setMessage('Product added successfully');
-        setSavedId(product.id);
-      } else navigate(`/products/${product.id}`);
+        navigate(`/products/${product.id}/edit`, {
+          state: { message: 'Product added successfully' },
+        });
+      } else navigate(`/products/${product.id}/edit`);
     } catch (e) {
       const mapped = detailErrors(e);
       if (Object.keys(mapped).length) setErrors(mapped);
@@ -96,15 +113,27 @@ export default function ProductFormPage() {
       setImageError('Only JPEG, PNG and WebP images are allowed');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_IMAGE_BYTES) {
       setImageError('Image is too large');
       return;
     }
     try {
       await productApi.upload(Number(id ?? savedId), file);
+      const productId = Number(id ?? savedId);
+      setImages(await productApi.images(productId));
+      if (fileInput.current) fileInput.current.value = '';
       setImageError('');
     } catch (e) {
       setImageError(e instanceof ApiError ? e.message : 'Could not upload image.');
+    }
+
+    async function removeImage(image: ProductImage) {
+      try {
+        await productApi.removeImage(image.id);
+        setImages(images.filter((current) => current.id !== image.id));
+      } catch (e) {
+        setImageError(e instanceof ApiError ? e.message : 'Could not delete image.');
+      }
     }
   }
 
@@ -185,12 +214,25 @@ export default function ProductFormPage() {
           {(props) => (
             <input
               {...props}
+              ref={fileInput}
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
             />
           )}
         </FormField>
+      )}
+      {images.length > 0 && (
+        <div className="product-images">
+          {images.map((image) => (
+            <div key={image.id}>
+              <img src={`/api${image.url}`} alt="Product" />
+              <button type="button" onClick={() => removeImage(image)}>
+                Delete image
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

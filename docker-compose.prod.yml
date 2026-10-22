@@ -69,6 +69,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        VITE_PRODUCT_IMAGE_MAX_BYTES: ${VITE_PRODUCT_IMAGE_MAX_BYTES:-5242880}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}

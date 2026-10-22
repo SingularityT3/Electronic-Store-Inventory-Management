@@ -28,7 +28,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route
           element={
-            <RequirePermission permission="products.manage" what="product management">
+            <RequirePermission permission="products.view" what="the product catalog">
               <ProductListPage />
             </RequirePermission>
           }
@@ -44,6 +44,14 @@ export default function App() {
         />
         <Route
           element={
+            <RequirePermission permission="products.view" what="product search">
+              <PlaceholderPage title="Product search" />
+            </RequirePermission>
+          }
+          path="/products/search"
+        />
+        <Route
+          element={
             <RequirePermission permission="products.manage" what="product management">
               <ProductFormPage />
             </RequirePermission>
@@ -52,7 +60,7 @@ export default function App() {
         />
         <Route
           element={
-            <RequirePermission permission="products.manage" what="product management">
+            <RequirePermission permission="products.view" what="the product catalog">
               <ProductViewPage />
             </RequirePermission>
           }

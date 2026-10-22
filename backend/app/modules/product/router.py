@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -35,7 +35,7 @@ class ProductInput(BaseModel):
     sku: str = Field(max_length=64)
     category_id: int
     brand: str = Field(max_length=100)
-    price: Decimal
+    price: Decimal = Field(ge=0, max_digits=12, decimal_places=2, allow_inf_nan=False)
     description: str | None = None
 
 
@@ -73,8 +73,6 @@ def _validate(body: ProductInput, db: Session, product_id: int | None = None) ->
         _error("name", "Product Name is required")
     if not sku:
         _error("sku", "SKU is required")
-    if body.price < 0:
-        _error("price", "Price must be non-negative")
     if db.scalar(select(Category.id).where(Category.id == body.category_id)) is None:
         _error("category_id", "Unknown category")
     product_sku = select(Product.id).where(func.lower(Product.sku) == sku.lower())
@@ -158,7 +156,7 @@ def create_product(
         category_id=body.category_id,
         brand=body.brand.strip(),
         price=body.price,
-        description=body.description,
+        description=body.description.strip() if body.description else None,
     )
     db.add(product)
     try:
@@ -176,7 +174,7 @@ def create_product(
         username=user.username,
         entity_type="product",
         entity_id=str(product.id),
-        after={"name": name, "sku": sku, "price": body.price},
+        after={"name": name, "sku": sku, "price": str(body.price)},
     )
     db.commit()
     category_name = db.scalar(select(Category.name).where(Category.id == product.category_id)) or ""
@@ -215,7 +213,7 @@ def update_product(
     product.brand, product.price, product.description = (
         body.brand.strip(),
         body.price,
-        body.description,
+        body.description.strip() if body.description else None,
     )
     try:
         db.flush()
@@ -288,15 +286,15 @@ def _image_type(content: bytes) -> tuple[str, str] | None:
 
 
 @router.post("/{product_id}/images", response_model=ImageOut, status_code=status.HTTP_201_CREATED)
-async def upload_image(
+def upload_image(
     product_id: int,
     file: Annotated[UploadFile, File()],
     db: DbSession,
     settings: AppSettings,
-    _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
 ) -> ImageOut:
     _active_product(product_id, db)
-    content = await file.read(settings.product_image_max_bytes + 1)
+    content = file.file.read(settings.product_image_max_bytes + 1)
     if len(content) > settings.product_image_max_bytes:
         _error("file", "Image is too large")
     detected = _image_type(content)
@@ -306,10 +304,26 @@ async def upload_image(
     image_dir = Path(settings.product_image_dir)
     image_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{uuid4().hex}{extension}"
-    (image_dir / stored_name).write_bytes(content)
+    path = image_dir / stored_name
+    path.write_bytes(content)
     image = ProductImage(product_id=product_id, file_path=stored_name)
     db.add(image)
-    db.commit()
+    audit_service.record(
+        db,
+        module="product",
+        action="product_image_uploaded",
+        user_id=user.id,
+        username=user.username,
+        entity_type="product_image",
+        entity_id=stored_name,
+        after={"product_id": product_id, "file_type": detected[0]},
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        path.unlink(missing_ok=True)
+        raise
     return ImageOut(id=image.id, url=f"/product/images/{image.id}")
 
 
@@ -337,7 +351,11 @@ def serve_image(
     settings: AppSettings,
     _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
 ) -> FileResponse:
-    image = db.get(ProductImage, image_id)
+    image = db.scalar(
+        select(ProductImage)
+        .join(Product, Product.id == ProductImage.product_id)
+        .where(ProductImage.id == image_id, Product.is_active)
+    )
     if image is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Image not found")
     path = Path(settings.product_image_dir) / image.file_path
@@ -358,13 +376,27 @@ def delete_image(
     image_id: int,
     db: DbSession,
     settings: AppSettings,
-    _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
 ) -> None:
-    image = db.get(ProductImage, image_id)
+    image = db.scalar(
+        select(ProductImage)
+        .join(Product, Product.id == ProductImage.product_id)
+        .where(ProductImage.id == image_id, Product.is_active)
+    )
     if image is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Image not found")
     path = Path(settings.product_image_dir) / image.file_path
     if path.is_file():
         path.unlink()
     db.delete(image)
+    audit_service.record(
+        db,
+        module="product",
+        action="product_image_deleted",
+        user_id=user.id,
+        username=user.username,
+        entity_type="product_image",
+        entity_id=str(image.id),
+        before={"product_id": image.product_id, "file_path": image.file_path},
+    )
     db.commit()

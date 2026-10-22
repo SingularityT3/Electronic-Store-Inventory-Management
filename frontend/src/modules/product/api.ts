@@ -31,7 +31,8 @@ export interface ProductImage {
 }
 
 export const productApi = {
-  list: () => api<ProductPage>('/product'),
+  list: (page = 1, pageSize = 50) =>
+    api<ProductPage>(`/product?page=${page}&page_size=${pageSize}`),
   get: (id: number) => api<Product>(`/product/${id}`),
   categories: () => api<Category[]>('/product/categories'),
   create: (body: object) => api<Product>('/product', { method: 'POST', body }),
