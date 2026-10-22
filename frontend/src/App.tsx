@@ -7,6 +7,7 @@ import {
   ResetPasswordPage,
   UsersPage,
 } from './modules/auth';
+import { ProductFormPage, ProductListPage, ProductViewPage } from './modules/product';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -25,9 +26,50 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route
+          element={
+            <RequirePermission permission="products.view" what="the product catalog">
+              <ProductListPage />
+            </RequirePermission>
+          }
+          path="/products"
+        />
+        <Route
+          element={
+            <RequirePermission permission="products.manage" what="product management">
+              <ProductFormPage />
+            </RequirePermission>
+          }
+          path="/products/new"
+        />
+        <Route
+          element={
+            <RequirePermission permission="products.view" what="product search">
+              <PlaceholderPage title="Product search" />
+            </RequirePermission>
+          }
+          path="/products/search"
+        />
+        <Route
+          element={
+            <RequirePermission permission="products.manage" what="product management">
+              <ProductFormPage />
+            </RequirePermission>
+          }
+          path="/products/:id/edit"
+        />
+        <Route
+          element={
+            <RequirePermission permission="products.view" what="the product catalog">
+              <ProductViewPage />
+            </RequirePermission>
+          }
+          path="/products/:id"
+        />
         {NAV_ITEMS.flatMap((item) => {
           // Feature items replace the placeholder with their screen. `path/*` keeps the
           // guard on any sub-page a feature adds later (e.g. /products/new).
+          if (item.path === '/products') return [];
           const screen =
             item.path === '/audit' ? (
               <AuditLogPage />

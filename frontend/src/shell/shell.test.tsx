@@ -161,7 +161,6 @@ test('a menu link opens its screen', async () => {
 
 // FR1.1-ST-2, FR1.2-ST-2, FR3.1-ST-2, FR5.1-ST-2, FR5.3-ST-2: a URL typed by hand is still blocked.
 test.each([
-  ['cashier', '/products', 'product management'],
   ['cashier', '/suppliers', 'supplier management'],
   ['staff', '/categories', 'category management'],
   ['staff', '/purchase-orders', 'purchase orders'],
@@ -179,6 +178,13 @@ test.each([
     );
   },
 );
+
+test('cashier can open the products catalog', async () => {
+  signedInAs('cashier');
+  renderAt('/products');
+  expect(await screen.findByRole('heading', { name: 'Products' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Access denied' })).not.toBeInTheDocument();
+});
 
 test('a permitted role opens the screen', async () => {
   signedInAs('admin');

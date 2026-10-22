@@ -2,10 +2,10 @@
 
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from app.modules.stock._internal.models import Location
+from app.modules.stock._internal.models import Location, SerialNumber, StockLevel
 
 
 class StockService(Protocol):
@@ -14,6 +14,28 @@ class StockService(Protocol):
     Methods are added as features land; callers depend on this interface,
     never on `_internal`.
     """
+
+
+def has_stock(db: Session, product_id: int) -> bool:
+    """Return whether a product or variant has stock on hand."""
+    return bool(
+        db.scalar(
+            select(
+                exists().where(
+                    StockLevel.product_id == product_id,
+                    StockLevel.quantity > 0,
+                )
+            )
+        )
+        or db.scalar(
+            select(
+                exists().where(
+                    SerialNumber.product_id == product_id,
+                    SerialNumber.status == "in_stock",
+                )
+            )
+        )
+    )
 
 
 def location_exists(db: Session, location_id: int) -> bool:

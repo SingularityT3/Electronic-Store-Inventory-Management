@@ -13,6 +13,7 @@ COPY migrations ./migrations
 COPY scripts ./scripts
 
 RUN useradd --system --no-create-home esims
+RUN mkdir -p /data/product-images && chown -R esims:esims /data
 USER esims
 
 EXPOSE 8000
