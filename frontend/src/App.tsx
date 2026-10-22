@@ -7,6 +7,8 @@ import {
   ResetPasswordPage,
   UsersPage,
 } from './modules/auth';
+import { SalesAvailabilityPage } from './modules/sales';
+import { StockLevelsPage } from './modules/stock';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -33,6 +35,10 @@ export default function App() {
               <AuditLogPage />
             ) : item.path === '/users' ? (
               <UsersPage />
+            ) : item.path === '/stock' ? (
+              <StockLevelsPage />
+            ) : item.path === '/sales' ? (
+              <SalesAvailabilityPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );

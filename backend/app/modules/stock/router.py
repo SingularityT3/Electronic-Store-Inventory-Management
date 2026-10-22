@@ -1,14 +1,16 @@
 """HTTP routes for the `stock` module."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
-from app.modules.auth import Permission, require
+from app.modules.auth import CurrentUser, Permission, authorize_location, require
+from app.modules.stock import stock_positions
 from app.modules.stock._internal.models import Location
 
 router = APIRouter(prefix="/stock", tags=["stock"])
@@ -20,7 +22,169 @@ class LocationOut(BaseModel):
     type: str
 
 
-@router.get("/locations", dependencies=[Depends(require(Permission.STOCK_VIEW))])
-def list_locations(db: Annotated[Session, Depends(get_session)]) -> list[LocationOut]:
-    locations = db.scalars(select(Location).where(Location.is_active).order_by(Location.name)).all()
+class ManagedLocationOut(LocationOut):
+    address: str | None
+    is_active: bool
+
+
+class StockLevelOut(BaseModel):
+    product_id: int
+    product_name: str
+    sku: str
+    category_id: int
+    category_name: str
+    variant_id: int | None
+    variant_sku: str | None
+    variant_attributes: dict[str, object] | None
+    location_id: int
+    location_name: str
+    quantity: int
+    total_quantity: int
+
+
+class LocationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    type: Literal["store", "warehouse"]
+    address: str | None = None
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Location name cannot be blank.")
+        return value
+
+
+class LocationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    type: Literal["store", "warehouse"] | None = None
+    address: str | None = None
+    is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Location name cannot be blank.")
+        return value
+
+
+def _commit_location(db: Session) -> None:
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        if constraint_name != "uq_locations_name":
+            raise
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "A location with this name already exists."
+        ) from None
+
+
+@router.get("/locations")
+def list_locations(
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
+) -> list[LocationOut]:
+    query = select(Location).where(Location.is_active)
+    if not user.sees_all_locations:
+        query = query.where(Location.id == user.location_id)
+    locations = db.scalars(query.order_by(Location.name)).all()
     return [LocationOut.model_validate(location, from_attributes=True) for location in locations]
+
+
+@router.get("/levels")
+def list_stock_levels(
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[StockLevelOut]:
+    if not user.sees_all_locations:
+        if location_id is not None:
+            authorize_location(db, user, location_id, "View stock levels")
+        location_id = user.location_id
+
+    if location_id is not None:
+        location = db.scalar(select(Location).where(Location.id == location_id, Location.is_active))
+        if location is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
+
+    positions = stock_positions(db)
+    if not user.sees_all_locations:
+        positions = [position for position in positions if position.location_id == user.location_id]
+    totals: dict[tuple[int, int | None], int] = {}
+    for position in positions:
+        key = (position.product_id, position.variant_id)
+        totals[key] = totals.get(key, 0) + position.quantity
+
+    return [
+        StockLevelOut(
+            product_id=position.product_id,
+            product_name=position.product_name,
+            sku=position.sku,
+            category_id=position.category_id,
+            category_name=position.category_name,
+            variant_id=position.variant_id,
+            variant_sku=position.variant_sku,
+            variant_attributes=position.variant_attributes,
+            location_id=position.location_id,
+            location_name=position.location_name,
+            quantity=position.quantity,
+            total_quantity=totals[(position.product_id, position.variant_id)],
+        )
+        for position in positions
+        if location_id is None or position.location_id == location_id
+    ]
+
+
+@router.post(
+    "/locations",
+    response_model=ManagedLocationOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(Permission.LOCATIONS_MANAGE))],
+)
+def create_location(
+    body: LocationCreate, db: Annotated[Session, Depends(get_session)]
+) -> ManagedLocationOut:
+    location = Location(**body.model_dump())
+    db.add(location)
+    _commit_location(db)
+    db.refresh(location)
+    return ManagedLocationOut.model_validate(location, from_attributes=True)
+
+
+@router.patch(
+    "/locations/{location_id}",
+    response_model=ManagedLocationOut,
+    dependencies=[Depends(require(Permission.LOCATIONS_MANAGE))],
+)
+def update_location(
+    location_id: int,
+    body: LocationUpdate,
+    db: Annotated[Session, Depends(get_session)],
+) -> ManagedLocationOut:
+    location = db.get(Location, location_id)
+    if location is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
+
+    values = body.model_dump(exclude_unset=True)
+    if not values:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Provide at least one field.")
+    for field in ("name", "type", "is_active"):
+        if field in values and values[field] is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Location {field} cannot be null.",
+            )
+
+    for field, value in values.items():
+        setattr(location, field, value)
+    _commit_location(db)
+    db.refresh(location)
+    return ManagedLocationOut.model_validate(location, from_attributes=True)

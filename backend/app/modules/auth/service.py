@@ -20,6 +20,7 @@ class Permission(StrEnum):
     PRODUCTS_MANAGE = "products.manage"
     """Create and edit products, categories and variants, including prices."""
     STOCK_VIEW = "stock.view"
+    LOCATIONS_MANAGE = "locations.manage"
     STOCK_ADJUST = "stock.adjust"
     STOCK_TRANSFER = "stock.transfer"
     SUPPLIERS_MANAGE = "suppliers.manage"

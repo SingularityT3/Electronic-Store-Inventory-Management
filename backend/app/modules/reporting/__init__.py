@@ -4,6 +4,6 @@ Public surface of the `reporting` module. Other modules may import from here onl
 `_internal` is private to this module.
 """
 
-from app.modules.reporting.service import ReportingService
+from app.modules.reporting.service import ReportingService, reorder_rows, valuation_rows
 
-__all__ = ["ReportingService"]
+__all__ = ["ReportingService", "reorder_rows", "valuation_rows"]
