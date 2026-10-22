@@ -30,8 +30,10 @@ LOCATIONS = [
 
 # (name, parent name)
 CATEGORIES = [
+    ("Electronics", None),
+    ("Mobile Phones", "Electronics"),
+    ("Smartphones", "Mobile Phones"),
     ("Phones", None),
-    ("Smartphones", "Phones"),
     ("Feature Phones", "Phones"),
     ("Laptops", None),
     ("Audio", None),

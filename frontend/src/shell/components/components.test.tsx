@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { AccessDenied, ConfirmDialog, DataTable, EmptyState, FormField } from '.';
+import { AccessDenied, Breadcrumb, ConfirmDialog, DataTable, EmptyState, FormField } from '.';
 
 interface Product {
   sku: string;
@@ -125,6 +125,26 @@ test('ConfirmDialog keeps Tab inside the dialog', async () => {
 test('a closed ConfirmDialog renders nothing', () => {
   dialog({ open: false });
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+});
+
+test('Breadcrumb exposes an accessible navigation trail', () => {
+  render(
+    <MemoryRouter>
+      <Breadcrumb
+        items={[
+          { label: 'Electronics', to: '/categories?selected=1' },
+          { label: 'Mobile Phones', to: '/categories?selected=2' },
+          { label: 'Smartphones' },
+        ]}
+      />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Mobile Phones' })).toHaveAttribute(
+    'href',
+    '/categories?selected=2',
+  );
+  expect(screen.getByText('Smartphones')).toHaveAttribute('aria-current', 'page');
 });
 
 test('AccessDenied says what is blocked and links back to the dashboard', () => {
