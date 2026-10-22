@@ -49,11 +49,7 @@ export async function api<T = void>(
     if (response.status === 401 && !path.startsWith('/auth/login')) {
       window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     }
-    throw new ApiError(
-      response.status,
-      detail,
-      fields,
-    );
+    throw new ApiError(response.status, detail, fields);
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
 }
