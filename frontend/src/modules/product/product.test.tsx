@@ -25,7 +25,7 @@ function renderProduct(path: string, role: Role) {
     'fetch',
     vi.fn((url: string) => {
       if (url === '/api/auth/me') return reply(user);
-      if (url === '/api/product') {
+      if (url.startsWith('/api/product?page=')) {
         return reply({
           items: [
             {

@@ -27,19 +27,18 @@ export async function api<T = void>(
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    const fields =
-      Array.isArray(data.detail)
-        ? Object.fromEntries(
-            data.detail
-              .filter((item: unknown) => typeof item === 'object' && item !== null)
-              .map((item: { loc?: unknown[]; msg?: unknown }) => [
-                String(item.loc?.at(-1) ?? ''),
-                String(item.msg ?? ''),
-              ]),
-          )
-        : typeof data.detail === 'object' && data.detail !== null
-          ? data.detail
-          : {};
+    const fields = Array.isArray(data.detail)
+      ? Object.fromEntries(
+          data.detail
+            .filter((item: unknown) => typeof item === 'object' && item !== null)
+            .map((item: { loc?: unknown[]; msg?: unknown }) => [
+              String(item.loc?.at(-1) ?? ''),
+              String(item.msg ?? ''),
+            ]),
+        )
+      : typeof data.detail === 'object' && data.detail !== null
+        ? data.detail
+        : {};
     const detail =
       typeof data.detail === 'string'
         ? data.detail
