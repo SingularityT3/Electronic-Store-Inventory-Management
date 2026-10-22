@@ -44,7 +44,6 @@ export default function ProductFormPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [imageError, setImageError] = useState('');
-  const [savedId, setSavedId] = useState<number | null>(null);
   const [images, setImages] = useState<ProductImage[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -118,22 +117,21 @@ export default function ProductFormPage() {
       return;
     }
     try {
-      await productApi.upload(Number(id ?? savedId), file);
-      const productId = Number(id ?? savedId);
-      setImages(await productApi.images(productId));
+      await productApi.upload(Number(id), file);
+      setImages(await productApi.images(Number(id)));
       if (fileInput.current) fileInput.current.value = '';
       setImageError('');
     } catch (e) {
       setImageError(e instanceof ApiError ? e.message : 'Could not upload image.');
     }
+  }
 
-    async function removeImage(image: ProductImage) {
-      try {
-        await productApi.removeImage(image.id);
-        setImages(images.filter((current) => current.id !== image.id));
-      } catch (e) {
-        setImageError(e instanceof ApiError ? e.message : 'Could not delete image.');
-      }
+  async function removeImage(image: ProductImage) {
+    try {
+      await productApi.removeImage(image.id);
+      setImages((current) => current.filter((item) => item.id !== image.id));
+    } catch (e) {
+      setImageError(e instanceof ApiError ? e.message : 'Could not delete image.');
     }
   }
 
@@ -209,7 +207,7 @@ export default function ProductFormPage() {
         </FormField>
         <button type="submit">{editing ? 'Save changes' : 'Add product'}</button>
       </form>
-      {(editing || savedId !== null) && (
+      {editing && (
         <FormField label="Product image" error={imageError}>
           {(props) => (
             <input

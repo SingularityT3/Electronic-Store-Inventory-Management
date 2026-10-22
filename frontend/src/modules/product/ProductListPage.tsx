@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { can, useAuth } from '../auth';
@@ -18,20 +18,23 @@ export default function ProductListPage() {
   const [message, setMessage] = useState('');
   const [deleting, setDeleting] = useState<Product | null>(null);
 
-  function load(currentPage = page) {
-    setLoading(true);
-    setError('');
-    productApi
-      .list(currentPage, PAGE_SIZE)
-      .then((result: ProductPage) => {
-        setProducts(result.items);
-        setTotal(result.total);
-      })
-      .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load products.'))
-      .finally(() => setLoading(false));
-  }
+  const load = useCallback(
+    (currentPage = page) => {
+      setLoading(true);
+      setError('');
+      productApi
+        .list(currentPage, PAGE_SIZE)
+        .then((result: ProductPage) => {
+          setProducts(result.items);
+          setTotal(result.total);
+        })
+        .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load products.'))
+        .finally(() => setLoading(false));
+    },
+    [page],
+  );
 
-  useEffect(() => load(page), [page]);
+  useEffect(() => load(page), [load, page]);
 
   async function remove() {
     if (!deleting) return;
