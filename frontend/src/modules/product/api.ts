@@ -6,6 +6,8 @@ export interface Product {
   sku: string;
   category_id: number;
   category_name: string;
+  category_path: { id: number; name: string }[];
+  category_path_label: string;
   brand: string;
   price: string;
   description: string | null;
@@ -16,6 +18,28 @@ export interface Category {
   id: number;
   name: string;
   parent_id: number | null;
+  depth: number;
+  path: { id: number; name: string }[];
+  path_label: string;
+  product_count: number;
+  total_product_count: number;
+}
+
+export interface CategoryProduct {
+  id: number;
+  name: string;
+  sku: string;
+  brand: string;
+  price: string;
+  category_path: { id: number; name: string }[];
+  category_path_label: string;
+}
+
+export interface CategoryProductPage {
+  items: CategoryProduct[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface ProductPage {
@@ -35,6 +59,16 @@ export const productApi = {
     api<ProductPage>(`/product?page=${page}&page_size=${pageSize}`),
   get: (id: number) => api<Product>(`/product/${id}`),
   categories: () => api<Category[]>('/product/categories'),
+  category: (id: number) => api<Category>(`/product/categories/${id}`),
+  categoryProducts: (id: number, page = 1, pageSize = 50) =>
+    api<CategoryProductPage>(
+      `/product/categories/${id}/products?page=${page}&page_size=${pageSize}`,
+    ),
+  createCategory: (body: { name: string; parent_id: number | null }) =>
+    api<Category>('/product/categories', { method: 'POST', body }),
+  updateCategory: (id: number, body: { name?: string; parent_id?: number | null }) =>
+    api<Category>(`/product/categories/${id}`, { method: 'PATCH', body }),
+  removeCategory: (id: number) => api(`/product/categories/${id}`, { method: 'DELETE' }),
   create: (body: object) => api<Product>('/product', { method: 'POST', body }),
   update: (id: number, body: object) => api<Product>(`/product/${id}`, { method: 'PUT', body }),
   remove: (id: number) => api(`/product/${id}`, { method: 'DELETE' }),

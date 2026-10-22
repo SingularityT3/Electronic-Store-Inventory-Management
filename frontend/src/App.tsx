@@ -7,7 +7,12 @@ import {
   ResetPasswordPage,
   UsersPage,
 } from './modules/auth';
-import { ProductFormPage, ProductListPage, ProductViewPage } from './modules/product';
+import {
+  CategoriesPage,
+  ProductFormPage,
+  ProductListPage,
+  ProductViewPage,
+} from './modules/product';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -75,6 +80,8 @@ export default function App() {
               <AuditLogPage />
             ) : item.path === '/users' ? (
               <UsersPage />
+            ) : item.path === '/categories' ? (
+              <CategoriesPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );

@@ -144,6 +144,20 @@ for the product or one of its variants. The product module depends on the public
 interface only; `app/main.py` wires it to the stock module's implementation, so product never
 imports stock internals.
 
+Categories are managed by the product module at `/api/product/categories`. The flat category
+response is in tree order and includes ancestor paths, direct active-product counts, and
+roll-up counts for all active products in descendants. The category product endpoint uses a
+recursive PostgreSQL CTE, so arbitrary-depth hierarchies do not require per-level queries.
+Creating, moving, and deleting categories take the same transaction-level advisory lock for
+the category tree. Moves validate the complete descendant set while holding that lock, which
+prevents concurrent opposing moves from creating a cycle. Sibling names are unique; unknown
+parents, self/descendant moves, and duplicate siblings are field errors. A category cannot be
+deleted while any child or product row references it, including inactive products. Category
+changes record `category_created`, `category_updated`, `category_moved`, and
+`category_deleted` in the same transaction as the data change. Product responses resolve the
+category path by ID at read time, so renames are immediately reflected in listings and
+dropdowns.
+
 JPEG, PNG and WebP uploads are checked by magic bytes, assigned a random server-side filename,
 and limited by `PRODUCT_IMAGE_MAX_BYTES` (5 MiB by default). Files are stored in the
 `product-images` Docker volume and served only through authenticated API routes with

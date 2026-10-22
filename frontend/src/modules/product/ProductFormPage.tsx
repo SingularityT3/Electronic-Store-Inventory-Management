@@ -169,7 +169,7 @@ export default function ProductFormPage() {
               <option value="">Select category</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {category.path_label}
                 </option>
               ))}
             </select>

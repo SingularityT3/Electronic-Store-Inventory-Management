@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '../../api';
-import { ConfirmDialog } from '../../shell/components';
+import { Breadcrumb, ConfirmDialog } from '../../shell/components';
 import { can, useAuth } from '../auth';
 import { productApi, type Product, type ProductImage } from './api';
 
@@ -71,7 +71,14 @@ export default function ProductViewPage() {
         <dt>SKU</dt>
         <dd>{product.sku}</dd>
         <dt>Category</dt>
-        <dd>{product.category_name}</dd>
+        <dd>
+          <Breadcrumb
+            items={product.category_path.map((item) => ({
+              label: item.name,
+              to: `/categories?selected=${item.id}`,
+            }))}
+          />
+        </dd>
         <dt>Brand</dt>
         <dd>{product.brand}</dd>
         <dt>Price</dt>
