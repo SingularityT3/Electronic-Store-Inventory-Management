@@ -12,6 +12,7 @@ import {
   CategoryAttributesPage,
   ProductFormPage,
   ProductListPage,
+  ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
 import { SalesAvailabilityPage } from './modules/sales';
@@ -59,7 +60,7 @@ export default function App() {
           path="/products/search"
           element={
             <RequirePermission permission="products.view" what="product search">
-              <PlaceholderPage title="Product search" />
+              <ProductSearchPage />
             </RequirePermission>
           }
         />

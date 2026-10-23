@@ -12,6 +12,8 @@ export interface Product {
   price: string;
   description: string | null;
   is_active: boolean;
+  variant_count: number;
+  stock: number;
 }
 
 export interface Category {
@@ -74,8 +76,10 @@ export interface ProductVariant {
 }
 
 export const productApi = {
-  list: (page = 1, pageSize = 50) =>
-    api<ProductPage>(`/product?page=${page}&page_size=${pageSize}`),
+  list: (page = 1, pageSize = 50, q = '') =>
+    api<ProductPage>(
+      `/product?page=${page}&page_size=${pageSize}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
+    ),
   get: (id: number) => api<Product>(`/product/${id}`),
   categories: () => api<Category[]>('/product/categories'),
   category: (id: number) => api<Category>(`/product/categories/${id}`),

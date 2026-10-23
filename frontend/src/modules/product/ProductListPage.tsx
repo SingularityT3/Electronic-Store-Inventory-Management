@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { can, useAuth } from '../auth';
-import { ConfirmDialog, DataTable } from '../../shell/components';
+import { ConfirmDialog, DataTable, SearchBox } from '../../shell/components';
 import { productApi, type Product, type ProductPage } from './api';
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
@@ -17,13 +17,14 @@ export default function ProductListPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [deleting, setDeleting] = useState<Product | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(
     (currentPage = page) => {
       setLoading(true);
       setError('');
       productApi
-        .list(currentPage, PAGE_SIZE)
+        .list(currentPage, PAGE_SIZE, query)
         .then((result: ProductPage) => {
           setProducts(result.items);
           setTotal(result.total);
@@ -31,7 +32,7 @@ export default function ProductListPage() {
         .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load products.'))
         .finally(() => setLoading(false));
     },
-    [page],
+    [page, query],
   );
 
   useEffect(() => load(page), [load, page]);
@@ -59,6 +60,13 @@ export default function ProductListPage() {
           </Link>
         )}
       </header>
+      <SearchBox
+        value={query}
+        onSearch={(value) => {
+          setQuery(value);
+          setPage(1);
+        }}
+      />
       {message && <p role="status">{message}</p>}
       {error && (
         <p role="alert" className="error">

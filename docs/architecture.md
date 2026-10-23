@@ -126,6 +126,29 @@ in: a header (brand, notification bell placeholder, user menu with Sign out), a 
 the content area, plus shared components in `shell/components/` (`DataTable`, `FormField`,
 `EmptyState`, `ConfirmDialog`, `AccessDenied`, `RequirePermission`).
 
+### Product search
+
+`GET /api/product` accepts the optional `q` parameter in addition to its existing paging
+parameters. A trimmed term searches active product names, SKUs (including active variant SKUs),
+brands and category names. Category matches roll up to every descendant category through the
+same recursive tree query used by the category product endpoint. Terms are literal: backslashes,
+percent signs and underscores are escaped before being passed as bound parameters; terms longer
+than 100 characters are rejected. Results are ranked by exact SKU, exact name, prefix matches
+and then other substring matches, with name and ID as stable tie-breakers.
+
+Search results include the category path, current price, active variant count and live stock.
+The product module receives one batched stock request through its public `StockCheck` protocol;
+Staff and Cashier requests are scoped to their assigned location, while Admin and Manager see
+the total across locations. Search responses are never cached (`Cache-Control: no-store`) and
+reads do not create audit entries. The frontend `SearchBox` is reusable by future stock,
+purchasing and sales screens; the current implementation mounts it on the product list and
+product search screens only.
+
+The endpoint is intentionally kept as the existing paged list so #13 can add filter and sort
+parameters to the same query builder. The 5,000/10,000-product performance benchmark belongs
+to #35; it was not run in this change because the benchmark fixture and production-sized catalog
+are not part of the current test suite.
+
 The menu is built from `NAV_ITEMS` in `shell/navigation.ts`: each item names the permission it
 needs, and the sidebar shows an item only if the server-sent `permissions` of the signed-in user
 include it, so each role sees exactly its screens (FR5.1-IT-3). Menu hiding is cosmetic. Every

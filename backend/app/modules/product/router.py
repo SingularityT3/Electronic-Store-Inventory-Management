@@ -51,6 +51,8 @@ class ProductOut(ProductInput):
     category_name: str
     category_path: list[dict[str, int | str]]
     category_path_label: str
+    variant_count: int = 0
+    stock: int = 0
 
 
 class ProductPage(BaseModel):
@@ -58,6 +60,9 @@ class ProductPage(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+SEARCH_TERM_MAX_LENGTH = 100
 
 
 class CategoryOut(BaseModel):
@@ -151,7 +156,11 @@ def _validate(body: ProductInput, db: Session, product_id: int | None = None) ->
 
 
 def _product_out(
-    product: Product, category_name: str, category_path: list[dict[str, int | str]]
+    product: Product,
+    category_name: str,
+    category_path: list[dict[str, int | str]],
+    variant_count: int = 0,
+    stock: int = 0,
 ) -> ProductOut:
     return ProductOut(
         id=product.id,
@@ -165,6 +174,8 @@ def _product_out(
         price=product.price,
         description=product.description,
         is_active=product.is_active,
+        variant_count=variant_count,
+        stock=stock,
     )
 
 
@@ -712,7 +723,7 @@ def list_variants(
     _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
 ) -> list[VariantOut]:
     product = _active_product(product_id, db)
-    quantities = _stock_checker(db, product_id) if _stock_checker else {}
+    quantities = _stock_checker(db, product_id).get(product_id, {}) if _stock_checker else {}
     variants = db.scalars(
         select(ProductVariant)
         .where(ProductVariant.product_id == product_id, ProductVariant.is_active)
@@ -749,7 +760,7 @@ def create_variant(
     product, definitions = _variant_product_and_definitions(product_id, db)
     if _stock_checker is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
-    quantities = _stock_checker(db, product_id)
+    quantities = _stock_checker(db, product_id).get(product_id, {})
     if (
         not db.scalar(select(ProductVariant.id).where(ProductVariant.product_id == product_id))
         and quantities.get(None, 0) > 0
@@ -867,7 +878,11 @@ def update_variant(
             after=new,
         )
     db.commit()
-    return _variant_out(variant, product, _stock_checker(db, product_id) if _stock_checker else {})
+    return _variant_out(
+        variant,
+        product,
+        _stock_checker(db, product_id).get(product_id, {}) if _stock_checker else {},
+    )
 
 
 @router.delete("/{product_id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -889,7 +904,7 @@ def delete_variant(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Variant not found")
     if _stock_checker is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
-    if _stock_checker(db, product_id).get(variant_id, 0) > 0:
+    if _stock_checker(db, product_id).get(product_id, {}).get(variant_id, 0) > 0:
         raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete variant with existing stock")
     variant.is_active = False
     audit_service.record(
@@ -909,12 +924,123 @@ def delete_variant(
 @router.get("", response_model=ProductPage)
 def list_products(
     db: DbSession,
-    _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    q: str | None = Query(None, max_length=SEARCH_TERM_MAX_LENGTH),
 ) -> ProductPage:
+    term = q.strip() if q is not None else ""
+    if q is not None and len(q) > SEARCH_TERM_MAX_LENGTH:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Search term is too long")
+
+    variant_count = (
+        select(func.count(ProductVariant.id))
+        .where(ProductVariant.product_id == Product.id, ProductVariant.is_active)
+        .correlate(Product)
+        .scalar_subquery()
+        .label("variant_count")
+    )
+    if term:
+        escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        prefix = f"{escaped}%"
+        rows = list(
+            db.execute(
+                text(
+                    """
+                    WITH RECURSIVE matched_categories AS (
+                        SELECT id FROM categories
+                        WHERE name ILIKE :pattern ESCAPE '\\'
+                    ),
+                    descendants AS (
+                        SELECT id FROM matched_categories
+                        UNION ALL
+                        SELECT c.id FROM categories c
+                        JOIN descendants d ON c.parent_id = d.id
+                    ),
+                    tree AS (
+                        SELECT c.id, ARRAY[c.id] AS id_path,
+                               ARRAY[c.name::text] AS name_path
+                        FROM categories c WHERE c.parent_id IS NULL
+                        UNION ALL
+                        SELECT c.id, tree.id_path || c.id,
+                               tree.name_path || c.name
+                        FROM categories c JOIN tree ON tree.id = c.parent_id
+                    )
+                    SELECT p.id, p.name, p.sku, p.category_id, c.name AS category_name,
+                           tree.id_path, tree.name_path, p.brand, p.price,
+                           p.description, p.is_active,
+                           (
+                             SELECT count(*) FROM product_variants v
+                             WHERE v.product_id = p.id AND v.is_active
+                           )::int AS variant_count,
+                           count(*) OVER() AS total,
+                           CASE
+                             WHEN lower(p.sku) = lower(:term) THEN 0
+                             WHEN lower(p.name) = lower(:term) THEN 1
+                             WHEN p.sku ILIKE :prefix ESCAPE '\' OR
+                                  p.name ILIKE :prefix ESCAPE '\' THEN 2
+                             ELSE 3
+                           END AS rank
+                    FROM products p
+                    JOIN categories c ON c.id = p.category_id
+                    JOIN tree ON tree.id = p.category_id
+                    WHERE p.is_active AND (
+                        p.name ILIKE :pattern ESCAPE '\' OR
+                        p.sku ILIKE :pattern ESCAPE '\' OR
+                        p.brand ILIKE :pattern ESCAPE '\' OR
+                        EXISTS (
+                            SELECT 1 FROM product_variants v
+                            WHERE v.product_id = p.id AND v.is_active
+                              AND v.sku ILIKE :pattern ESCAPE '\'
+                        ) OR
+                        p.category_id IN (SELECT id FROM descendants)
+                    )
+                    ORDER BY rank, p.name, p.id
+                    OFFSET :offset LIMIT :limit
+                    """
+                ),
+                {
+                    "pattern": pattern,
+                    "prefix": prefix,
+                    "term": term,
+                    "offset": (page - 1) * page_size,
+                    "limit": page_size,
+                },
+            ).mappings()
+        )
+        total = rows[0]["total"] if rows else 0
+        product_ids = [row["id"] for row in rows]
+        stock = (
+            _stock_checker(db, product_ids, user.location_id, user.sees_all_locations)
+            if _stock_checker
+            else {}
+        )
+        items = [
+            ProductOut(
+                id=row["id"],
+                name=row["name"],
+                sku=row["sku"],
+                category_id=row["category_id"],
+                category_name=row["category_name"],
+                category_path=[
+                    {"id": item_id, "name": item_name}
+                    for item_id, item_name in zip(row["id_path"], row["name_path"], strict=True)
+                ],
+                category_path_label=" > ".join(row["name_path"]),
+                brand=row["brand"],
+                price=row["price"],
+                description=row["description"],
+                is_active=row["is_active"],
+                variant_count=row["variant_count"],
+                stock=sum(stock.get(row["id"], {}).values()),
+            )
+            for row in rows
+        ]
+        return ProductPage(items=items, total=total, page=page, page_size=page_size)
+
     query = (
-        select(Product, Category.name)
+        select(Product, Category.name, variant_count)
         .join(Category, Category.id == Product.category_id)
         .where(Product.is_active)
         .order_by(Product.name, Product.id)
@@ -922,10 +1048,22 @@ def list_products(
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = db.execute(query.offset((page - 1) * page_size).limit(page_size)).all()
     paths = _category_path_map(db)
+    product_ids = [product.id for product, _, _ in rows]
+    stock = (
+        _stock_checker(db, product_ids, user.location_id, user.sees_all_locations)
+        if _stock_checker
+        else {}
+    )
     return ProductPage(
         items=[
-            _product_out(product, category_name, paths.get(product.category_id, []))
-            for product, category_name in rows
+            _product_out(
+                product,
+                category_name,
+                paths.get(product.category_id, []),
+                variant_count,
+                sum(stock.get(product.id, {}).values()),
+            )
+            for product, category_name, variant_count in rows
         ],
         total=total,
         page=page,
@@ -1048,7 +1186,9 @@ def delete_product(
     product = _active_product(product_id, db)
     if _stock_checker is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
-    if any(quantity > 0 for quantity in _stock_checker(db, product_id).values()):
+    if any(
+        quantity > 0 for quantity in _stock_checker(db, product_id).get(product_id, {}).values()
+    ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete product with existing stock")
     product.is_active = False
     audit_service.record(
