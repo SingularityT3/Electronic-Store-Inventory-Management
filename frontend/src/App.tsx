@@ -12,6 +12,7 @@ import {
   CategoryAttributesPage,
   ProductFormPage,
   ProductListPage,
+  ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
@@ -51,7 +52,7 @@ export default function App() {
         <Route
           element={
             <RequirePermission permission="products.view" what="product search">
-              <PlaceholderPage title="Product search" />
+              <ProductSearchPage />
             </RequirePermission>
           }
           path="/products/search"
