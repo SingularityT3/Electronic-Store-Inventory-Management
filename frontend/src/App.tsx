@@ -16,6 +16,7 @@ import {
 } from './modules/product';
 import { SalesAvailabilityPage } from './modules/sales';
 import { StockLevelsPage, StockTransferPage } from './modules/stock';
+import { SuppliersPage } from './modules/purchasing';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -108,6 +109,8 @@ export default function App() {
               <SalesAvailabilityPage />
             ) : item.path === '/categories' ? (
               <CategoriesPage />
+            ) : item.path === '/suppliers' ? (
+              <SuppliersPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );
