@@ -275,9 +275,14 @@ def update_stock(
                 details=(
                     f"Updated stock for product {product_id} at location {location_id} "
                     f"by {quantity_delta} ({movement_type})."
+                    + (f" Reason: {reason.strip()}" if reason else "")
                 ),
                 before={"quantity": previous_quantity},
-                after={"quantity": level.quantity, "quantity_delta": quantity_delta},
+                after={
+                    "quantity": level.quantity,
+                    "quantity_delta": quantity_delta,
+                    **({"reason_code": reason_code, "reason": reason.strip()} if reason else {}),
+                },
             )
             db.flush()
 
@@ -406,6 +411,51 @@ def transfer_stock(
             )
     except InsufficientStockError as exc:
         raise StockTransferError(409, "Insufficient stock at the source location.") from exc
+
+
+class StockAdjustmentError(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def adjust_stock(
+    db: Session,
+    *,
+    product_id: int,
+    variant_id: int | None,
+    location_id: int,
+    quantity_change: int,
+    reason: str,
+    reason_code: ReasonCode = "correction",
+    user_id: int,
+    username: str,
+) -> StockUpdateResult:
+    """Apply a manual stock adjustment (FR-2.4); the reason is mandatory."""
+    if not reason or not reason.strip():
+        raise StockAdjustmentError(422, "Reason is required for stock adjustment")
+    if quantity_change == 0:
+        raise StockAdjustmentError(422, "Adjustment quantity must not be zero.")
+    if not db.scalar(select(exists().where(Location.id == location_id, Location.is_active))):
+        raise StockAdjustmentError(404, "Location not found.")
+    try:
+        return update_stock(
+            db,
+            product_id=product_id,
+            variant_id=variant_id,
+            location_id=location_id,
+            quantity_delta=quantity_change,
+            movement_type="adjustment",
+            user_id=user_id,
+            username=username,
+            reason_code=reason_code,
+            reason=reason.strip(),
+        )
+    except InsufficientStockError as exc:
+        raise StockAdjustmentError(409, "Adjustment would result in negative stock") from exc
+    except ValueError as exc:
+        raise StockAdjustmentError(404, "Product or variant not found.") from exc
 
 
 class StockService(Protocol):

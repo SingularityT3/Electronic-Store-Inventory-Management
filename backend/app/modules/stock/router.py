@@ -13,9 +13,19 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
 from app.modules.product import product_stock_items
-from app.modules.stock import reevaluate_stock_alert, stock_positions, transfer_stock
+from app.modules.stock import (
+    adjust_stock,
+    reevaluate_stock_alert,
+    stock_positions,
+    transfer_stock,
+)
 from app.modules.stock._internal.models import Location, StockLevel
-from app.modules.stock.service import StockTransferError, StockTransferResult
+from app.modules.stock.service import (
+    ReasonCode,
+    StockAdjustmentError,
+    StockTransferError,
+    StockTransferResult,
+)
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -92,6 +102,24 @@ class StockTransferOut(BaseModel):
     to_location_id: int
     quantity: int
     created_at: datetime
+
+
+class StockAdjustmentCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    variant_id: int | None = Field(default=None, gt=0)
+    location_id: int = Field(gt=0)
+    quantity_change: int
+    reason: str = ""
+    reason_code: ReasonCode = "correction"
+
+
+class StockAdjustmentOut(BaseModel):
+    product_id: int
+    variant_id: int | None
+    location_id: int
+    quantity_change: int
+    previous_quantity: int
+    quantity: int
 
 
 class LocationCreate(BaseModel):
@@ -360,6 +388,46 @@ def create_stock_transfer(
         to_location_id=transfer.to_location_id,
         quantity=transfer.quantity,
         created_at=transfer.created_at,
+    )
+
+
+@router.post(
+    "/adjustments",
+    response_model=StockAdjustmentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_stock_adjustment(
+    body: StockAdjustmentCreate,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_ADJUST))],
+) -> StockAdjustmentOut:
+    authorize_location(db, user, body.location_id, "Adjust stock")
+    try:
+        result = adjust_stock(
+            db,
+            product_id=body.product_id,
+            variant_id=body.variant_id,
+            location_id=body.location_id,
+            quantity_change=body.quantity_change,
+            reason=body.reason,
+            reason_code=body.reason_code,
+            user_id=user.id,
+            username=user.username,
+        )
+        db.commit()
+    except StockAdjustmentError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return StockAdjustmentOut(
+        product_id=result.product_id,
+        variant_id=result.variant_id,
+        location_id=result.location_id,
+        quantity_change=result.quantity_delta,
+        previous_quantity=result.previous_quantity,
+        quantity=result.quantity,
     )
 
 
