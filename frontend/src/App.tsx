@@ -16,7 +16,8 @@ import {
   ProductViewPage,
 } from './modules/product';
 import { SalesAvailabilityPage } from './modules/sales';
-import { StockLevelsPage } from './modules/stock';
+import { StockLevelsPage, StockTransferPage } from './modules/stock';
+import { PurchaseOrdersPage, SuppliersPage } from './modules/purchasing';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -103,10 +104,16 @@ export default function App() {
               <UsersPage />
             ) : item.path === '/stock' ? (
               <StockLevelsPage />
+            ) : item.path === '/stock/transfer' ? (
+              <StockTransferPage />
             ) : item.path === '/sales' ? (
               <SalesAvailabilityPage />
             ) : item.path === '/categories' ? (
               <CategoriesPage />
+            ) : item.path === '/suppliers' ? (
+              <SuppliersPage />
+            ) : item.path === '/purchase-orders' ? (
+              <PurchaseOrdersPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );

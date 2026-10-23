@@ -1,6 +1,6 @@
 """Tables owned by the `purchasing` module."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -79,6 +79,7 @@ class PurchaseOrder(Base):
     status: Mapped[str] = mapped_column(String(20), server_default=text("'draft'"))
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     notes: Mapped[str | None] = mapped_column(Text)
+    expected_delivery_date: Mapped[date | None] = mapped_column()
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

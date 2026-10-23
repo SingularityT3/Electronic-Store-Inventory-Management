@@ -4,6 +4,17 @@ Public surface of the `notifications` module. Other modules may import from here
 `_internal` is private to this module.
 """
 
-from app.modules.notifications.service import NotificationsService
+from app.modules.notifications._internal.service import (
+    active_stock_alerts,
+    record_purchase_order_status,
+    reevaluate_stock_alert,
+)
+from app.modules.notifications.service import NotificationsService, StockAlertData
 
-__all__ = ["NotificationsService"]
+__all__ = [
+    "NotificationsService",
+    "StockAlertData",
+    "active_stock_alerts",
+    "reevaluate_stock_alert",
+    "record_purchase_order_status",
+]
