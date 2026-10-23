@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { AuthProvider, type Permission } from '../auth';
 import StockLevelsPage from './StockLevelsPage';
 
 const LEVELS = [
@@ -52,28 +53,55 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function mockApi() {
+function mockApi(
+  permissions: Permission[] = ['stock.view'],
+  adjustStatus = 201,
+  adjustBody: unknown = {},
+) {
+  const adjustCalls: RequestInit[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn((url: string) =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () =>
-          url.includes('/stock/levels')
-            ? LEVELS
-            : [
-                { id: 1, name: 'Chennai', type: 'store' },
-                { id: 2, name: 'Bengaluru', type: 'warehouse' },
-              ],
-      }),
-    ),
+    vi.fn((url: string, init?: RequestInit) => {
+      let status = 200;
+      let body: unknown;
+      if (url === '/api/auth/me') {
+        body = {
+          id: 1,
+          username: 'u',
+          full_name: 'U',
+          role: 'manager',
+          location_id: null,
+          permissions,
+        };
+      } else if (url === '/api/stock/adjustments') {
+        adjustCalls.push(init ?? {});
+        status = adjustStatus;
+        body = adjustBody;
+      } else if (url.includes('/stock/levels')) {
+        body = LEVELS;
+      } else {
+        body = [
+          { id: 1, name: 'Chennai', type: 'store' },
+          { id: 2, name: 'Bengaluru', type: 'warehouse' },
+        ];
+      }
+      return Promise.resolve({ ok: status < 400, status, json: async () => body });
+    }),
+  );
+  return adjustCalls;
+}
+
+function renderPage() {
+  render(
+    <AuthProvider>
+      <StockLevelsPage />
+    </AuthProvider>,
   );
 }
 
 test('shows per-location quantities and the combined total', async () => {
   mockApi();
-  render(<StockLevelsPage />);
+  renderPage();
   expect(await screen.findByRole('heading', { name: 'Stock levels' })).toBeInTheDocument();
   const rows = await screen.findAllByRole('row');
   expect(rows).toHaveLength(4);
@@ -84,7 +112,7 @@ test('shows per-location quantities and the combined total', async () => {
 test('filters by location, category and product and shows an empty state', async () => {
   mockApi();
   const user = userEvent.setup();
-  render(<StockLevelsPage />);
+  renderPage();
   await screen.findByText('Test Phone (PHONE-1-BLK)');
 
   await user.selectOptions(screen.getByLabelText('Location'), '2');
@@ -106,4 +134,66 @@ test('filters by location, category and product and shows an empty state', async
   expect(
     within(screen.getByRole('table')).getByRole('cell', { name: 'Test Phone (PHONE-1)' }),
   ).toBeInTheDocument();
+});
+
+test('hides the Adjust action from users without stock.adjust', async () => {
+  mockApi(['stock.view']);
+  renderPage();
+  await screen.findByRole('cell', { name: 'Test Laptop (LAPTOP-1)' });
+  expect(screen.queryByRole('button', { name: /^Adjust/ })).not.toBeInTheDocument();
+});
+
+test('submits a signed adjustment with its reason', async () => {
+  const user = userEvent.setup();
+  const calls = mockApi(['stock.view', 'stock.adjust']);
+  renderPage();
+  await user.click(
+    await screen.findByRole('button', { name: 'Adjust Test Laptop (LAPTOP-1) at Bengaluru' }),
+  );
+  await user.type(screen.getByLabelText('Quantity change'), '-5');
+  await user.selectOptions(screen.getByLabelText('Reason type'), 'damage');
+  await user.type(screen.getByLabelText('Reason'), 'Damaged');
+  await user.click(screen.getByRole('button', { name: 'Adjust stock' }));
+
+  expect(await screen.findByRole('status')).toHaveTextContent('Stock adjusted');
+  expect(JSON.parse(String(calls[0].body))).toEqual({
+    product_id: 2,
+    variant_id: null,
+    location_id: 2,
+    quantity_change: -5,
+    reason_code: 'damage',
+    reason: 'Damaged',
+  });
+});
+
+test('blocks a blank reason without calling the API', async () => {
+  const user = userEvent.setup();
+  const calls = mockApi(['stock.view', 'stock.adjust']);
+  renderPage();
+  await user.click(
+    await screen.findByRole('button', { name: 'Adjust Test Laptop (LAPTOP-1) at Bengaluru' }),
+  );
+  await user.type(screen.getByLabelText('Quantity change'), '-1');
+  await user.click(screen.getByRole('button', { name: 'Adjust stock' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Reason is required for stock adjustment',
+  );
+  expect(calls).toHaveLength(0);
+});
+
+test('shows the API error when the adjustment would go negative', async () => {
+  const user = userEvent.setup();
+  mockApi(['stock.view', 'stock.adjust'], 409, {
+    detail: 'Adjustment would result in negative stock',
+  });
+  renderPage();
+  await user.click(
+    await screen.findByRole('button', { name: 'Adjust Test Laptop (LAPTOP-1) at Bengaluru' }),
+  );
+  await user.type(screen.getByLabelText('Quantity change'), '-500');
+  await user.type(screen.getByLabelText('Reason'), 'Lost');
+  await user.click(screen.getByRole('button', { name: 'Adjust stock' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Adjustment would result in negative stock',
+  );
 });

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../api';
-import { DataTable } from '../../shell/components';
+import { DataTable, FormField } from '../../shell/components';
+import { can, useAuth } from '../auth';
 
 interface StockLevel {
   product_id: number;
@@ -29,7 +30,115 @@ function itemLabel(row: StockLevel): string {
     : `${row.product_name} (${row.sku})`;
 }
 
+const REASON_CODES = [
+  ['correction', 'Correction'],
+  ['damage', 'Damage'],
+  ['loss', 'Loss'],
+] as const;
+
+function AdjustStockForm({
+  row,
+  onDone,
+  onCancel,
+}: {
+  row: StockLevel;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [change, setChange] = useState('');
+  const [reasonCode, setReasonCode] = useState('correction');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    const parsed = Number(change);
+    if (!Number.isSafeInteger(parsed) || parsed === 0) {
+      setError('Enter a non-zero whole-number quantity change.');
+      return;
+    }
+    if (!reason.trim()) {
+      setError('Reason is required for stock adjustment');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api('/stock/adjustments', {
+        method: 'POST',
+        body: {
+          product_id: row.product_id,
+          variant_id: row.variant_id,
+          location_id: row.location_id,
+          quantity_change: parsed,
+          reason_code: reasonCode,
+          reason: reason.trim(),
+        },
+      });
+      onDone(`Stock adjusted for ${itemLabel(row)} at ${row.location_name}.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Could not adjust stock.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form aria-label="Adjust stock" onSubmit={submit}>
+      <h2>
+        Adjust stock: {itemLabel(row)} at {row.location_name} (currently {row.quantity})
+      </h2>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <FormField label="Quantity change" hint="Positive adds stock, negative removes it.">
+        {(field) => (
+          <input
+            {...field}
+            type="number"
+            step="1"
+            value={change}
+            onChange={(event) => setChange(event.target.value)}
+          />
+        )}
+      </FormField>
+      <FormField label="Reason type">
+        {(field) => (
+          <select
+            {...field}
+            value={reasonCode}
+            onChange={(event) => setReasonCode(event.target.value)}
+          >
+            {REASON_CODES.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        )}
+      </FormField>
+      <FormField label="Reason">
+        {(field) => (
+          <textarea {...field} value={reason} onChange={(event) => setReason(event.target.value)} />
+        )}
+      </FormField>
+      <button type="submit" disabled={submitting}>
+        {submitting ? 'Adjusting…' : 'Adjust stock'}
+      </button>{' '}
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 export default function StockLevelsPage() {
+  const { user } = useAuth();
+  const canAdjust = can(user, 'stock.adjust');
+  const [adjusting, setAdjusting] = useState<StockLevel | null>(null);
+  const [notice, setNotice] = useState('');
   const [levels, setLevels] = useState<StockLevel[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [locationFilter, setLocationFilter] = useState('');
@@ -37,6 +146,8 @@ export default function StockLevelsPage() {
   const [productFilter, setProductFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -57,7 +168,7 @@ export default function StockLevelsPage() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [reloadCount]);
 
   const categories = useMemo(
     () =>
@@ -94,8 +205,21 @@ export default function StockLevelsPage() {
           {error}
         </p>
       )}
+      {notice && <p role="status">{notice}</p>}
       {!error && (
         <>
+          {adjusting && (
+            <AdjustStockForm
+              key={`${adjusting.product_id}-${adjusting.variant_id}-${adjusting.location_id}`}
+              row={adjusting}
+              onCancel={() => setAdjusting(null)}
+              onDone={(message) => {
+                setAdjusting(null);
+                setNotice(message);
+                setReloadCount((count) => count + 1);
+              }}
+            />
+          )}
           <form className="audit-filters" aria-label="Filter stock levels">
             <label>
               Location
@@ -151,6 +275,25 @@ export default function StockLevelsPage() {
               { header: 'Location', cell: (row) => row.location_name },
               { header: 'Quantity', cell: (row) => row.quantity },
               { header: 'Combined total', cell: (row) => row.total_quantity },
+              ...(canAdjust
+                ? [
+                    {
+                      header: 'Actions',
+                      cell: (row: StockLevel) => (
+                        <button
+                          type="button"
+                          aria-label={`Adjust ${itemLabel(row)} at ${row.location_name}`}
+                          onClick={() => {
+                            setNotice('');
+                            setAdjusting(row);
+                          }}
+                        >
+                          Adjust
+                        </button>
+                      ),
+                    },
+                  ]
+                : []),
             ]}
             rows={filtered}
             rowKey={(row) => `${row.product_id}-${row.variant_id ?? 'product'}-${row.location_id}`}
