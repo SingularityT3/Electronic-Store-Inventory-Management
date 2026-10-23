@@ -124,6 +124,8 @@ def test_staff_stock_levels_are_scoped_to_assigned_location(client, make_user, d
             "location_name": "Assigned Store",
             "quantity": 4,
             "total_quantity": 4,
+            "reorder_threshold": 0,
+            "reorder_to_level": 0,
         }
     ]
     forbidden = client.get(f"/api/stock/levels?location_id={other.id}")

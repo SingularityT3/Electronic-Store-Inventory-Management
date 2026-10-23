@@ -1,17 +1,21 @@
 """HTTP routes for the `stock` module."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
-from app.modules.stock import stock_positions
-from app.modules.stock._internal.models import Location
+from app.modules.product import product_stock_items
+from app.modules.stock import reevaluate_stock_alert, stock_positions, transfer_stock
+from app.modules.stock._internal.models import Location, StockLevel
+from app.modules.stock.service import StockTransferError, StockTransferResult
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -40,6 +44,54 @@ class StockLevelOut(BaseModel):
     location_name: str
     quantity: int
     total_quantity: int
+    reorder_threshold: int
+    reorder_to_level: int
+
+
+class ReorderSettingsUpdate(BaseModel):
+    product_id: int = Field(ge=1)
+    variant_id: int | None = Field(default=None, ge=1)
+    location_id: int = Field(ge=1)
+    reorder_threshold: int = Field(ge=0)
+    reorder_to_level: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def reorder_to_level_is_valid(self) -> "ReorderSettingsUpdate":
+        if self.reorder_to_level is not None and self.reorder_to_level < self.reorder_threshold:
+            raise ValueError("Reorder-to level cannot be below the reorder threshold.")
+        return self
+
+
+class ReorderSettingsOut(BaseModel):
+    product_id: int
+    variant_id: int | None
+    location_id: int
+    reorder_threshold: int
+    reorder_to_level: int | None
+
+
+class StockTransferCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    variant_id: int | None = Field(default=None, gt=0)
+    from_location_id: int = Field(gt=0)
+    to_location_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def locations_must_differ(self) -> "StockTransferCreate":
+        if self.from_location_id == self.to_location_id:
+            raise ValueError("Source and destination locations must be different.")
+        return self
+
+
+class StockTransferOut(BaseModel):
+    id: int
+    product_id: int
+    variant_id: int | None
+    from_location_id: int
+    to_location_id: int
+    quantity: int
+    created_at: datetime
 
 
 class LocationCreate(BaseModel):
@@ -137,10 +189,90 @@ def list_stock_levels(
             location_name=position.location_name,
             quantity=position.quantity,
             total_quantity=totals[(position.product_id, position.variant_id)],
+            reorder_threshold=position.reorder_threshold,
+            reorder_to_level=position.reorder_to_level,
         )
         for position in positions
         if location_id is None or position.location_id == location_id
     ]
+
+
+@router.patch(
+    "/levels/reorder-settings",
+    response_model=ReorderSettingsOut,
+)
+def update_reorder_settings(
+    body: ReorderSettingsUpdate,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_ADJUST))],
+) -> ReorderSettingsOut:
+    authorize_location(db, user, body.location_id, "Update stock reorder settings")
+    location = db.scalar(
+        select(Location).where(Location.id == body.location_id, Location.is_active)
+    )
+    if location is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
+
+    item_exists = any(
+        item.product_id == body.product_id and item.variant_id == body.variant_id
+        for item in product_stock_items(db)
+    )
+    if not item_exists:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock item not found.")
+
+    statement = (
+        insert(StockLevel)
+        .values(
+            product_id=body.product_id,
+            variant_id=body.variant_id,
+            location_id=body.location_id,
+            quantity=0,
+            reorder_threshold=body.reorder_threshold,
+            reorder_to_level=body.reorder_to_level,
+        )
+        .on_conflict_do_update(
+            index_elements=[
+                StockLevel.product_id,
+                StockLevel.variant_id,
+                StockLevel.location_id,
+            ],
+            set_={
+                "reorder_threshold": body.reorder_threshold,
+                "updated_at": func.now(),
+                **(
+                    {"reorder_to_level": body.reorder_to_level}
+                    if "reorder_to_level" in body.model_fields_set
+                    else {}
+                ),
+            },
+        )
+    )
+    db.execute(statement)
+    db.flush()
+    reevaluate_stock_alert(
+        db,
+        product_id=body.product_id,
+        variant_id=body.variant_id,
+        location_id=body.location_id,
+    )
+    level = db.scalar(
+        select(StockLevel).where(
+            StockLevel.product_id == body.product_id,
+            StockLevel.variant_id.is_not_distinct_from(body.variant_id),
+            StockLevel.location_id == body.location_id,
+        )
+    )
+    if level is None:
+        raise RuntimeError("Stock level was not available after updating reorder settings.")
+    db.commit()
+    db.refresh(level)
+    return ReorderSettingsOut(
+        product_id=level.product_id,
+        variant_id=level.variant_id,
+        location_id=level.location_id,
+        reorder_threshold=level.reorder_threshold,
+        reorder_to_level=level.reorder_to_level,
+    )
 
 
 @router.post(
@@ -188,3 +320,54 @@ def update_location(
     _commit_location(db)
     db.refresh(location)
     return ManagedLocationOut.model_validate(location, from_attributes=True)
+
+
+@router.post(
+    "/transfers",
+    response_model=StockTransferOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_stock_transfer(
+    body: StockTransferCreate,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_TRANSFER))],
+) -> StockTransferOut:
+    authorize_location(db, user, body.from_location_id, "Transfer stock")
+    try:
+        transfer: StockTransferResult = transfer_stock(
+            db,
+            product_id=body.product_id,
+            variant_id=body.variant_id,
+            from_location_id=body.from_location_id,
+            to_location_id=body.to_location_id,
+            quantity=body.quantity,
+            user_id=user.id,
+            username=user.username,
+        )
+        db.commit()
+    except StockTransferError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return StockTransferOut(
+        id=transfer.id,
+        product_id=transfer.product_id,
+        variant_id=transfer.variant_id,
+        from_location_id=transfer.from_location_id,
+        to_location_id=transfer.to_location_id,
+        quantity=transfer.quantity,
+        created_at=transfer.created_at,
+    )
+
+
+@router.get(
+    "/transfers/locations",
+    response_model=list[LocationOut],
+    dependencies=[Depends(require(Permission.STOCK_TRANSFER))],
+)
+def list_transfer_locations(db: Annotated[Session, Depends(get_session)]) -> list[LocationOut]:
+    locations = db.scalars(select(Location).where(Location.is_active).order_by(Location.name)).all()
+    return [LocationOut.model_validate(location, from_attributes=True) for location in locations]
