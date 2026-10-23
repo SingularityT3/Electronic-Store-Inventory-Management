@@ -73,6 +73,7 @@ class ProductService(Protocol):
     Methods are added as features land; callers depend on this interface,
     never on `_internal`.
     """
+
     # Keep catalog consumers dependent on this public contract rather than private models.
 
 
