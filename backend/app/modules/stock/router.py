@@ -1,17 +1,19 @@
 """HTTP routes for the `stock` module."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
-from app.modules.stock import stock_positions
+from app.modules.stock import stock_positions, transfer_stock
 from app.modules.stock._internal.models import Location
+from app.modules.stock.service import StockTransferError, StockTransferResult
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -40,6 +42,30 @@ class StockLevelOut(BaseModel):
     location_name: str
     quantity: int
     total_quantity: int
+
+
+class StockTransferCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    variant_id: int | None = Field(default=None, gt=0)
+    from_location_id: int = Field(gt=0)
+    to_location_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def locations_must_differ(self) -> "StockTransferCreate":
+        if self.from_location_id == self.to_location_id:
+            raise ValueError("Source and destination locations must be different.")
+        return self
+
+
+class StockTransferOut(BaseModel):
+    id: int
+    product_id: int
+    variant_id: int | None
+    from_location_id: int
+    to_location_id: int
+    quantity: int
+    created_at: datetime
 
 
 class LocationCreate(BaseModel):
@@ -188,3 +214,54 @@ def update_location(
     _commit_location(db)
     db.refresh(location)
     return ManagedLocationOut.model_validate(location, from_attributes=True)
+
+
+@router.post(
+    "/transfers",
+    response_model=StockTransferOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_stock_transfer(
+    body: StockTransferCreate,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_TRANSFER))],
+) -> StockTransferOut:
+    authorize_location(db, user, body.from_location_id, "Transfer stock")
+    try:
+        transfer: StockTransferResult = transfer_stock(
+            db,
+            product_id=body.product_id,
+            variant_id=body.variant_id,
+            from_location_id=body.from_location_id,
+            to_location_id=body.to_location_id,
+            quantity=body.quantity,
+            user_id=user.id,
+            username=user.username,
+        )
+        db.commit()
+    except StockTransferError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return StockTransferOut(
+        id=transfer.id,
+        product_id=transfer.product_id,
+        variant_id=transfer.variant_id,
+        from_location_id=transfer.from_location_id,
+        to_location_id=transfer.to_location_id,
+        quantity=transfer.quantity,
+        created_at=transfer.created_at,
+    )
+
+
+@router.get(
+    "/transfers/locations",
+    response_model=list[LocationOut],
+    dependencies=[Depends(require(Permission.STOCK_TRANSFER))],
+)
+def list_transfer_locations(db: Annotated[Session, Depends(get_session)]) -> list[LocationOut]:
+    locations = db.scalars(select(Location).where(Location.is_active).order_by(Location.name)).all()
+    return [LocationOut.model_validate(location, from_attributes=True) for location in locations]
