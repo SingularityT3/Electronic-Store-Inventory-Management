@@ -10,6 +10,7 @@ export type Permission =
   | 'products.view'
   | 'products.manage'
   | 'stock.view'
+  | 'locations.manage'
   | 'stock.adjust'
   | 'stock.transfer'
   | 'suppliers.manage'
