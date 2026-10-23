@@ -44,6 +44,8 @@ services:
       LOCKOUT_MINUTES: ${LOCKOUT_MINUTES:-15}
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
       SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+      PRODUCT_IMAGE_DIR: /data/product-images
+      PRODUCT_IMAGE_MAX_BYTES: ${PRODUCT_IMAGE_MAX_BYTES:-5242880}
       APP_BASE_URL: https://${SITE_ADDRESS:-localhost}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -59,12 +61,16 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    volumes:
+      - product-images:/data/product-images
 
   web:
     image: esims-web:prod
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        VITE_PRODUCT_IMAGE_MAX_BYTES: ${VITE_PRODUCT_IMAGE_MAX_BYTES:-5242880}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
@@ -80,3 +86,4 @@ services:
 volumes:
   db-data:
   caddy-data:
+  product-images:

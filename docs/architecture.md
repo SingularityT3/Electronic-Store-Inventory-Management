@@ -8,7 +8,7 @@ and SRS NFR-11 (separate product, stock, sales and reporting concerns).
 
 | Module          | Responsibility                                                          |
 | --------------- | ----------------------------------------------------------------------- |
-| `product`       | Catalog, hierarchical categories, variants, search/filter               |
+| `product`       | Catalog, hierarchical categories, variants, search/filter, product images |
 | `stock`         | Per-location stock, movements, adjustments, transfers, batches/serials  |
 | `sales`         | Sales transactions, returns, invoices                                   |
 | `reporting`     | Valuation, trend, reorder and supplier reports, CSV/PDF export          |
@@ -134,6 +134,47 @@ access-denied page for a URL typed by hand; the API enforces the same rule with 
 
 To add a screen, give its feature module a page component and replace the `PlaceholderPage` for
 its path in `App.tsx`. A new menu item is one entry in `NAV_ITEMS`.
+
+## Product catalog
+
+The product API is mounted at `/api/product`. Product and category reads require
+`products.view`; product edits, soft deletes and image changes require `products.manage`.
+Product deletion is a soft delete and is refused while the stock module reports on-hand stock
+for the product or one of its variants. The product module depends on the public `StockCheck`
+interface only; `app/main.py` wires it to the stock module's implementation, so product never
+imports stock internals.
+
+Variants are managed under `/api/product/{product_id}/variants`. Reads require `products.view`;
+creation, edits, and soft deletion require `products.manage`. Variant attributes are normalized
+case-insensitively, validated against the effective category attribute definitions, and expose
+variant-specific stock and effective price. Duplicate combinations and SKUs are field errors.
+The stock interface returns a quantity map keyed by variant ID (with `null` for base stock), so
+the product module can keep variant stock independent and block deletion when that variant has
+stock. Variant and category-attribute changes are audited in the same transaction.
+
+Reusable attribute definitions are managed at
+`/api/product/categories/{category_id}/attributes`; definitions inherit through category
+ancestors, with the nearest definition winning. Deleting a definition does not change existing
+variants.
+
+Categories are managed by the product module at `/api/product/categories`. The flat category
+response is in tree order and includes ancestor paths, direct active-product counts, and
+roll-up counts for all active products in descendants. The category product endpoint uses a
+recursive PostgreSQL CTE, so arbitrary-depth hierarchies do not require per-level queries.
+Creating, moving, and deleting categories take the same transaction-level advisory lock for
+the category tree. Moves validate the complete descendant set while holding that lock, which
+prevents concurrent opposing moves from creating a cycle. Sibling names are unique; unknown
+parents, self/descendant moves, and duplicate siblings are field errors. A category cannot be
+deleted while any child or product row references it, including inactive products. Category
+changes record `category_created`, `category_updated`, `category_moved`, and
+`category_deleted` in the same transaction as the data change. Product responses resolve the
+category path by ID at read time, so renames are immediately reflected in listings and
+dropdowns.
+
+JPEG, PNG and WebP uploads are checked by magic bytes, assigned a random server-side filename,
+and limited by `PRODUCT_IMAGE_MAX_BYTES` (5 MiB by default). Files are stored in the
+`product-images` Docker volume and served only through authenticated API routes with
+`X-Content-Type-Options: nosniff`. Soft deletion retains image records and files for history.
 
 ## User management
 

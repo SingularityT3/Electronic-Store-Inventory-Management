@@ -30,7 +30,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | `audit`         | `audit_log`                                                                                                            |
 | `auth`          | `roles`, `users`, `user_sessions`, `password_reset_tokens`                                                             |
 | `notifications` | `notifications`                                                                                                        |
-| `product`       | `categories`, `products`, `product_variants`, `product_images`                                                         |
+| `product`       | `categories`, `category_attributes`, `products`, `product_variants`, `product_images`                                  |
 | `stock`         | `locations`, `stock_levels`, `item_costs`, `batches`, `serial_numbers`, `stock_movements`, `stock_transfers`           |
 | `purchasing`    | `suppliers`, `supplier_products`, `purchase_orders`, `purchase_order_lines`, `po_receipts`, `po_receipt_lines`, `po_receipt_serials`, `supplier_price_history` |
 | `sales`         | `sales`, `sale_lines`, `sale_line_serials`, `payments`, `returns`, `return_lines`, `invoices`                          |
@@ -42,6 +42,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Unique SKU (FR-1.1)                                 | `UNIQUE` on `products.sku` and `product_variants.sku`. Trigger `enforce_unique_sku` keeps the two in one namespace, using an advisory lock so concurrent inserts are safe. |
 | Unique variant combination (FR-1.3)                 | `UNIQUE (product_id, attributes)` on `product_variants`. jsonb equality ignores key order. |
+| Category attribute names                            | Unique index on `(category_id, lower(name))`; definitions are inherited by descendants and the nearest ancestor definition wins. |
 | Non-negative stock (FR-2.1, NFR-14)                 | `CHECK (quantity >= 0)` on `stock_levels`                                                 |
 | One stock row per item per location (FR-2.1)        | `UNIQUE NULLS NOT DISTINCT (product_id, variant_id, location_id)`                         |
 | Adjustment needs a reason (FR-2.4)                  | `CHECK` on `stock_movements`: an `adjustment` needs a `reason_code` and a non-blank `reason` |
@@ -64,6 +65,9 @@ Notes:
 - Products and variants are soft-deleted (`is_active`), because sales and stock refer to them.
 - An item is a product (`variant_id` NULL) or one of its variants. A product with variants is
   stocked per variant.
+- `category_attributes.allowed_values` is either a non-empty JSON array of strings or NULL for
+  free text. Variant attribute names and values are trimmed and compared case-insensitively;
+  predefined values are stored using their canonical spelling.
 - `stock_levels.reorder_to_level` NULL means 2 × `reorder_threshold` (A-4).
   `item_costs.average_cost` NULL means "cost not set" (A-3).
 - Search indexes (NFR-1, FR-7): `pg_trgm` GIN indexes on product name, SKU and brand, and on

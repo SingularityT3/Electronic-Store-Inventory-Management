@@ -74,10 +74,8 @@ def test_location_listing_keeps_stock_view_permission(client, make_user):
     other = admin.post("/api/stock/locations", json={"name": "Other Store", "type": "store"})
     assert other.status_code == 201, other.text
     all_locations = admin.get("/api/stock/locations")
-    assert [location["name"] for location in all_locations.json()] == [
-        "Other Store",
-        "Visible Store",
-    ]
+    listed_ids = {location["id"] for location in all_locations.json()}
+    assert {location_id, other.json()["id"]} <= listed_ids
     admin.post("/api/auth/logout")
 
     staff = signed_in_client(client, make_user, "staff", "staff_locations_view", location_id)

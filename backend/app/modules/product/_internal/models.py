@@ -43,6 +43,37 @@ class Category(Base):
     )
 
 
+class CategoryAttribute(Base):
+    """An attribute definition inherited by products in a category subtree."""
+
+    __tablename__ = "category_attributes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100))
+    position: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    allowed_values: Mapped[list[str] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_category_attributes_category_name_lower",
+            "category_id",
+            func.lower(name),
+            unique=True,
+        ),
+        CheckConstraint("btrim(name) <> ''", name="name_not_blank"),
+        CheckConstraint(
+            "allowed_values IS NULL OR (jsonb_typeof(allowed_values) = 'array' "
+            "AND jsonb_array_length(allowed_values) > 0)",
+            name="allowed_values_array",
+        ),
+    )
+
+
 class Product(Base):
     """A catalog product (FR-1.1). Deletion is soft (`is_active`), as sales reference it.
 

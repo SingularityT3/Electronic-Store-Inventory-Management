@@ -2,6 +2,8 @@
 # proxies /api to the backend.
 FROM node:22-alpine AS build
 WORKDIR /app
+ARG VITE_PRODUCT_IMAGE_MAX_BYTES=5242880
+ENV VITE_PRODUCT_IMAGE_MAX_BYTES=$VITE_PRODUCT_IMAGE_MAX_BYTES
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

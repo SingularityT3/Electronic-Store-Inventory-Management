@@ -1,4 +1,5 @@
 export { default as AccessDenied } from './AccessDenied';
+export { default as Breadcrumb, type BreadcrumbItem } from './Breadcrumb';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as DataTable, type Column } from './DataTable';
 export { default as EmptyState } from './EmptyState';

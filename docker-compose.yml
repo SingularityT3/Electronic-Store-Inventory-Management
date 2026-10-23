@@ -33,6 +33,7 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - product-images:/data/product-images
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +47,7 @@ services:
     build: ./frontend
     environment:
       VITE_API_TARGET: http://backend:8000
+      VITE_PRODUCT_IMAGE_MAX_BYTES: ${VITE_PRODUCT_IMAGE_MAX_BYTES:-5242880}
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:
@@ -56,3 +58,4 @@ services:
 
 volumes:
   db-data:
+  product-images:

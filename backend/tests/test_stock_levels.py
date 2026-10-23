@@ -10,7 +10,7 @@ from tests.helpers import login
 def test_stock_levels_are_per_location_and_expose_combined_totals(client, make_user, db):
     chennai = Location(name="Chennai", type="store")
     bengaluru = Location(name="Bengaluru", type="warehouse")
-    phones = Category(name="Phones")
+    phones = Category(name="Issue 14 Stock Phones")
     db.add_all([chennai, bengaluru, phones])
     db.flush()
     phone = Product(
@@ -60,7 +60,8 @@ def test_stock_levels_are_per_location_and_expose_combined_totals(client, make_u
 
     response = client.get("/api/stock/levels")
     assert response.status_code == 200, response.text
-    levels = response.json()
+    test_product_ids = {phone.id, variant_phone.id}
+    levels = [row for row in response.json() if row["product_id"] in test_product_ids]
     assert len(levels) == 4
     base_product = [row for row in levels if row["variant_id"] is None]
     variant_product = [row for row in levels if row["variant_id"] == variant.id]
@@ -77,14 +78,15 @@ def test_stock_levels_are_per_location_and_expose_combined_totals(client, make_u
 
     filtered = client.get(f"/api/stock/levels?location_id={chennai.id}")
     assert filtered.status_code == 200
-    assert {row["location_name"] for row in filtered.json()} == {"Chennai"}
-    assert {row["total_quantity"] for row in filtered.json() if row["variant_id"] is None} == {250}
+    filtered_levels = [row for row in filtered.json() if row["product_id"] in test_product_ids]
+    assert {row["location_name"] for row in filtered_levels} == {"Chennai"}
+    assert {row["total_quantity"] for row in filtered_levels if row["variant_id"] is None} == {250}
 
 
 def test_staff_stock_levels_are_scoped_to_assigned_location(client, make_user, db):
     assigned = Location(name="Assigned Store", type="store")
     other = Location(name="Other Store", type="store")
-    category = Category(name="Accessories")
+    category = Category(name="Issue 14 Stock Accessories")
     db.add_all([assigned, other, category])
     db.flush()
     product = Product(
@@ -114,7 +116,7 @@ def test_staff_stock_levels_are_scoped_to_assigned_location(client, make_user, d
             "product_name": "Test Cable",
             "sku": "CABLE-1",
             "category_id": category.id,
-            "category_name": "Accessories",
+            "category_name": "Issue 14 Stock Accessories",
             "variant_id": None,
             "variant_sku": None,
             "variant_attributes": None,
