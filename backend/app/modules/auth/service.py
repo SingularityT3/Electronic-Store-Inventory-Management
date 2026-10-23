@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
+
+from app.modules.auth._internal.models import User
 
 
 class Permission(StrEnum):
@@ -65,3 +68,17 @@ class LocationValidator(Protocol):
     """Composition-root supplied validation for stock-owned locations."""
 
     def __call__(self, db: Session, location_id: int) -> bool: ...
+
+
+def po_status_notification_recipients(db: Session, *, created_by_id: int) -> list[int]:
+    """Return Admins and the Manager who created a PO for its status notifications."""
+    recipient_ids = db.scalars(
+        select(User.id).where(
+            User.is_active,
+            or_(User.role == "admin", User.id == created_by_id),
+        )
+    ).all()
+    creator_role = db.scalar(select(User.role).where(User.id == created_by_id))
+    if creator_role != "manager":
+        recipient_ids = [user_id for user_id in recipient_ids if user_id != created_by_id]
+    return list(recipient_ids)

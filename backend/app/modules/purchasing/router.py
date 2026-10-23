@@ -19,6 +19,7 @@ from app.modules.purchasing._internal.models import (
     Supplier,
     SupplierProduct,
 )
+from app.modules.purchasing.purchase_orders import router as purchase_orders_router
 
 router = APIRouter(prefix="/purchasing", tags=["purchasing"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -494,3 +495,6 @@ def remove_supplier_product(
     )
     db.delete(entry)
     _commit(db)
+
+
+router.include_router(purchase_orders_router)

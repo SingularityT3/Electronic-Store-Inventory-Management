@@ -46,3 +46,13 @@ class NotificationsService(Protocol):
     def active_stock_alerts(
         self, db: Session, *, location_id: int | None = None
     ) -> list[StockAlertData]: ...
+
+    def record_purchase_order_status(
+        self,
+        db: Session,
+        *,
+        recipient_ids: list[int],
+        purchase_order_id: int,
+        po_number: str,
+        status: str,
+    ) -> None: ...

@@ -28,6 +28,49 @@ export interface CatalogItemInput {
   supplier_price: string;
 }
 
+export interface PurchaseOrderLine {
+  id: number;
+  product_id: number;
+  product_name: string;
+  sku: string;
+  variant_id: number | null;
+  quantity_ordered: number;
+  quantity_received: number;
+  unit_price: string;
+  line_total: string;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier_id: number;
+  supplier_name: string;
+  location_id: number;
+  status: 'draft' | 'submitted' | 'partially_received' | 'received' | 'cancelled';
+  created_by: number;
+  notes: string | null;
+  expected_delivery_date: string | null;
+  submitted_at: string | null;
+  created_at: string;
+  lines: PurchaseOrderLine[];
+  total: string;
+}
+
+export interface PurchaseOrderLineInput {
+  product_id: number;
+  variant_id: number | null;
+  quantity_ordered: number;
+  unit_price: string;
+}
+
+export interface PurchaseOrderInput {
+  supplier_id: number;
+  location_id: number;
+  expected_delivery_date: string;
+  notes: string | null;
+  lines: PurchaseOrderLineInput[];
+}
+
 export const purchasingApi = {
   suppliers: (activeOnly = false) =>
     api<Supplier[]>(`/purchasing/suppliers${activeOnly ? '?active_only=true' : ''}`),
@@ -50,4 +93,15 @@ export const purchasingApi = {
     }),
   removeSupplierProduct: (supplierId: number, entryId: number) =>
     api(`/purchasing/suppliers/${supplierId}/products/${entryId}`, { method: 'DELETE' }),
+  purchaseOrders: () => api<PurchaseOrder[]>('/purchasing/purchase-orders'),
+  pendingPurchaseOrders: () => api<PurchaseOrder[]>('/purchasing/purchase-orders/pending'),
+  purchaseOrder: (id: number) => api<PurchaseOrder>(`/purchasing/purchase-orders/${id}`),
+  createPurchaseOrder: (body: PurchaseOrderInput) =>
+    api<PurchaseOrder>('/purchasing/purchase-orders', { method: 'POST', body }),
+  updatePurchaseOrder: (id: number, body: PurchaseOrderInput) =>
+    api<PurchaseOrder>(`/purchasing/purchase-orders/${id}`, { method: 'PATCH', body }),
+  submitPurchaseOrder: (id: number) =>
+    api<PurchaseOrder>(`/purchasing/purchase-orders/${id}/submit`, { method: 'POST' }),
+  cancelPurchaseOrder: (id: number) =>
+    api<PurchaseOrder>(`/purchasing/purchase-orders/${id}/cancel`, { method: 'POST' }),
 };

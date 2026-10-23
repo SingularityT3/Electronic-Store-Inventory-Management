@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.notifications._internal.models import StockAlert
+from app.modules.notifications._internal.models import Notification, StockAlert
 from app.modules.notifications.service import StockAlertData
 
 
@@ -98,3 +98,29 @@ def active_stock_alerts(db: Session, *, location_id: int | None = None) -> list[
             query.order_by(StockAlert.location_name, StockAlert.product_name, StockAlert.id)
         )
     ]
+
+
+def record_purchase_order_status(
+    db: Session,
+    *,
+    recipient_ids: list[int],
+    purchase_order_id: int,
+    po_number: str,
+    status: str,
+) -> None:
+    """Add one in-app notification per recipient in the caller's transaction."""
+    if status not in {"submitted", "partially_received", "received", "cancelled"}:
+        raise ValueError(f"Unsupported purchase order notification status: {status}.")
+    for recipient_id in set(recipient_ids):
+        db.add(
+            Notification(
+                recipient_user_id=recipient_id,
+                type="po_status",
+                title="Purchase order status changed",
+                message=f"{po_number}: {status.replace('_', ' ').title()}",
+                location_id=None,
+                reference_type="purchase_order",
+                reference_id=purchase_order_id,
+            )
+        )
+    db.flush()

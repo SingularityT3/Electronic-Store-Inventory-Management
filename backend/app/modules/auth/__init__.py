@@ -13,12 +13,18 @@ from app.modules.auth._internal.permissions import (
     require,
     signed_in,
 )
-from app.modules.auth.service import AuthService, CurrentUser, Permission
+from app.modules.auth.service import (
+    AuthService,
+    CurrentUser,
+    Permission,
+    po_status_notification_recipients,
+)
 
 __all__ = [
     "AuthService",
     "CurrentUser",
     "Permission",
+    "po_status_notification_recipients",
     "authorize",
     "authorize_location",
     "current_user",

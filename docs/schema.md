@@ -181,6 +181,7 @@ erDiagram
         int id PK
         text po_number UK
         text status
+        date expected_delivery_date
     }
     purchase_order_lines {
         int id PK
