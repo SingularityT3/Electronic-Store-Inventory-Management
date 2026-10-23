@@ -74,6 +74,8 @@ class ProductService(Protocol):
     never on `_internal`.
     """
 
+    # Keep catalog consumers dependent on this public contract rather than private models.
+
 
 class StockCheck(Protocol):
     def __call__(
