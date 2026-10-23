@@ -1,5 +1,6 @@
 """Public service interface of the `product` module."""
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -14,4 +15,10 @@ class ProductService(Protocol):
 
 
 class StockCheck(Protocol):
-    def __call__(self, db: Session, product_id: int) -> dict[int | None, int]: ...
+    def __call__(
+        self,
+        db: Session,
+        product_ids: int | Sequence[int],
+        location_id: int | None = None,
+        all_locations: bool = True,
+    ) -> dict[int, dict[int | None, int]]: ...
