@@ -54,6 +54,25 @@ export interface ProductImage {
   url: string;
 }
 
+export interface CategoryAttribute {
+  id: number;
+  category_id: number;
+  name: string;
+  position: number;
+  allowed_values: string[] | null;
+}
+
+export interface ProductVariant {
+  id: number;
+  product_id: number;
+  sku: string;
+  attributes: Record<string, string>;
+  display_attributes: string[];
+  price: string | null;
+  effective_price: string;
+  stock: number;
+}
+
 export const productApi = {
   list: (page = 1, pageSize = 50) =>
     api<ProductPage>(`/product?page=${page}&page_size=${pageSize}`),
@@ -79,4 +98,24 @@ export const productApi = {
     return api<ProductImage>(`/product/${id}/images`, { method: 'POST', body });
   },
   removeImage: (id: number) => api(`/product/images/${id}`, { method: 'DELETE' }),
+  variants: (id: number) => api<ProductVariant[]>(`/product/${id}/variants`),
+  createVariant: (id: number, body: object) =>
+    api<ProductVariant>(`/product/${id}/variants`, { method: 'POST', body }),
+  updateVariant: (productId: number, variantId: number, body: object) =>
+    api<ProductVariant>(`/product/${productId}/variants/${variantId}`, {
+      method: 'PATCH',
+      body,
+    }),
+  removeVariant: (productId: number, variantId: number) =>
+    api(`/product/${productId}/variants/${variantId}`, { method: 'DELETE' }),
+  attributes: (id: number) => api<CategoryAttribute[]>(`/product/categories/${id}/attributes`),
+  createAttribute: (id: number, body: object) =>
+    api<CategoryAttribute>(`/product/categories/${id}/attributes`, { method: 'POST', body }),
+  updateAttribute: (categoryId: number, id: number, body: object) =>
+    api<CategoryAttribute>(`/product/categories/${categoryId}/attributes/${id}`, {
+      method: 'PATCH',
+      body,
+    }),
+  removeAttribute: (categoryId: number, id: number) =>
+    api(`/product/categories/${categoryId}/attributes/${id}`, { method: 'DELETE' }),
 };

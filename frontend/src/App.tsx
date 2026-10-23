@@ -9,6 +9,7 @@ import {
 } from './modules/auth';
 import {
   CategoriesPage,
+  CategoryAttributesPage,
   ProductFormPage,
   ProductListPage,
   ProductViewPage,
@@ -70,6 +71,14 @@ export default function App() {
             </RequirePermission>
           }
           path="/products/:id"
+        />
+        <Route
+          element={
+            <RequirePermission permission="products.manage" what="category management">
+              <CategoryAttributesPage />
+            </RequirePermission>
+          }
+          path="/categories/:id/attributes"
         />
         {NAV_ITEMS.flatMap((item) => {
           // Feature items replace the placeholder with their screen. `path/*` keeps the

@@ -17,7 +17,12 @@ from app.config import get_settings
 from app.db import Base, get_engine
 from app.modules.auth._internal.models import User
 from app.modules.auth._internal.passwords import hash_password
-from app.modules.product._internal.models import Category, Product, ProductVariant
+from app.modules.product._internal.models import (
+    Category,
+    CategoryAttribute,
+    Product,
+    ProductVariant,
+)
 from app.modules.purchasing._internal.models import Supplier, SupplierProduct
 from app.modules.stock._internal.models import ItemCost, Location, StockLevel
 from migrations import models  # noqa: F401  (registers every table, so all FKs resolve)
@@ -143,6 +148,20 @@ def seed(engine: Engine, password: str) -> None:
             categories[name] = _get_or_add(
                 session, Category, {"name": name, "parent_id": parent_id}
             )
+        _get_or_add(
+            session,
+            CategoryAttribute,
+            {"category_id": categories["Mobile Phones"].id, "name": "Color"},
+            position=0,
+            allowed_values=["Black", "White", "Violet"],
+        )
+        _get_or_add(
+            session,
+            CategoryAttribute,
+            {"category_id": categories["Mobile Phones"].id, "name": "Storage"},
+            position=1,
+            allowed_values=["64GB", "128GB", "256GB", "512GB"],
+        )
 
         # Stocked items per product SKU: [(product_id, variant_id, price)]
         items: dict[str, list[tuple[int, int | None, Decimal]]] = {}

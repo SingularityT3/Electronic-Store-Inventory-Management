@@ -16,7 +16,13 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service, changes
 from app.modules.auth import CurrentUser, Permission, require
-from app.modules.product._internal.models import Category, Product, ProductImage, ProductVariant
+from app.modules.product._internal.models import (
+    Category,
+    CategoryAttribute,
+    Product,
+    ProductImage,
+    ProductVariant,
+)
 from app.modules.product.service import StockCheck
 
 router = APIRouter(prefix="/product", tags=["product"])
@@ -90,6 +96,37 @@ class CategoryProductPage(BaseModel):
 class ImageOut(BaseModel):
     id: int
     url: str
+
+
+class AttributeOut(BaseModel):
+    id: int
+    category_id: int
+    name: str
+    position: int
+    allowed_values: list[str] | None
+
+
+class AttributeInput(BaseModel):
+    name: str = Field(max_length=100)
+    position: int = Field(default=0, ge=0)
+    allowed_values: list[str] | None = None
+
+
+class VariantInput(BaseModel):
+    sku: str = Field(max_length=64)
+    attributes: dict[str, str]
+    price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+
+
+class VariantOut(BaseModel):
+    id: int
+    product_id: int
+    sku: str
+    attributes: dict[str, str]
+    display_attributes: list[str]
+    price: Decimal | None
+    effective_price: Decimal
+    stock: int
 
 
 def _error(field: str, message: str, code: int = status.HTTP_422_UNPROCESSABLE_ENTITY) -> None:
@@ -208,6 +245,107 @@ def _category_or_404(category_id: int, db: Session) -> CategoryOut:
 
 def _category_path_map(db: Session) -> dict[int, list[dict[str, int | str]]]:
     return {item.id: item.path for item in _category_rows(db)}
+
+
+def _effective_attributes(db: Session, category_id: int) -> list[CategoryAttribute]:
+    categories: dict[int, Category] = {
+        category.id: category for category in db.scalars(select(Category))
+    }
+    chain: list[Category] = []
+    current = categories.get(category_id)
+    while current is not None:
+        chain.append(current)
+        current = categories.get(current.parent_id) if current.parent_id is not None else None
+    definitions: dict[str, CategoryAttribute] = {}
+    for category in reversed(chain):
+        for definition in db.scalars(
+            select(CategoryAttribute)
+            .where(CategoryAttribute.category_id == category.id)
+            .order_by(CategoryAttribute.position, CategoryAttribute.id)
+        ):
+            definitions[definition.name.casefold()] = definition
+    return sorted(definitions.values(), key=lambda item: (item.position, item.id))
+
+
+def _attribute_out(definition: CategoryAttribute) -> AttributeOut:
+    return AttributeOut(
+        id=definition.id,
+        category_id=definition.category_id,
+        name=definition.name,
+        position=definition.position,
+        allowed_values=definition.allowed_values,
+    )
+
+
+def _validate_attribute_input(body: AttributeInput) -> tuple[str, list[str] | None]:
+    name = body.name.strip()
+    if not name:
+        _error("name", "Attribute name is required")
+    values: list[str] | None = None
+    if body.allowed_values is not None:
+        values = [value.strip() for value in body.allowed_values if value.strip()]
+        if not values or len({value.casefold() for value in values}) != len(values):
+            _error("allowed_values", "Allowed values must be unique and non-blank")
+    return name, values
+
+
+def _normalise_variant(
+    attributes: dict[str, str], definitions: list[CategoryAttribute]
+) -> dict[str, str]:
+    if not attributes:
+        _error("attributes", "At least one attribute is required")
+    definition_map = {definition.name.casefold(): definition for definition in definitions}
+    normalized: dict[str, str] = {}
+    for raw_name, raw_value in attributes.items():
+        name = raw_name.strip()
+        value = raw_value.strip()
+        if not name:
+            _error("attributes", "Attribute names cannot be blank")
+        if not value:
+            _error("attributes", "Attribute values cannot be blank")
+        definition = definition_map.get(name.casefold())
+        if definitions and definition is None:
+            _error("attributes", f"Unknown attribute: {name}")
+        if definition is None:
+            normalized[name.casefold()] = value.casefold()
+            continue
+        if definition.allowed_values is not None:
+            canonical = next(
+                (
+                    option
+                    for option in definition.allowed_values
+                    if option.casefold() == value.casefold()
+                ),
+                None,
+            )
+            if canonical is None:
+                _error(
+                    "attributes",
+                    f"Invalid value for {definition.name}: {value}",
+                )
+            value = canonical
+        else:
+            value = value.casefold()
+        normalized[definition.name] = value
+    if definitions and set(normalized) != {definition.name for definition in definitions}:
+        _error("attributes", "All category attributes are required")
+    return normalized
+
+
+def _variant_out(
+    variant: ProductVariant, product: Product, quantities: dict[int | None, int]
+) -> VariantOut:
+    attributes = variant.attributes
+    return VariantOut(
+        id=variant.id,
+        product_id=variant.product_id,
+        sku=variant.sku,
+        attributes=attributes,
+        display_attributes=list(attributes.values()),
+        price=variant.price,
+        effective_price=variant.price if variant.price is not None else product.price,
+        stock=quantities.get(variant.id, 0),
+    )
 
 
 @router.get("/categories", response_model=list[CategoryOut])
@@ -440,6 +578,334 @@ def delete_category(
     db.commit()
 
 
+@router.get("/categories/{category_id}/attributes", response_model=list[AttributeOut])
+def list_category_attributes(
+    category_id: int,
+    db: DbSession,
+    _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
+) -> list[AttributeOut]:
+    _category_or_404(category_id, db)
+    return [_attribute_out(item) for item in _effective_attributes(db, category_id)]
+
+
+@router.post(
+    "/categories/{category_id}/attributes",
+    response_model=AttributeOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_category_attribute(
+    category_id: int,
+    body: AttributeInput,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> AttributeOut:
+    _category_or_404(category_id, db)
+    name, values = _validate_attribute_input(body)
+    definition = CategoryAttribute(
+        category_id=category_id, name=name, position=body.position, allowed_values=values
+    )
+    db.add(definition)
+    try:
+        db.flush()
+    except IntegrityError as error:
+        db.rollback()
+        if "category_attributes" in str(error.orig).lower():
+            _error("name", "An attribute with this name already exists")
+        raise
+    audit_service.record(
+        db,
+        module="product",
+        action="category_attribute_created",
+        user_id=user.id,
+        username=user.username,
+        entity_type="category_attribute",
+        entity_id=str(definition.id),
+        after={"category_id": category_id, "name": name, "allowed_values": values},
+    )
+    db.commit()
+    return _attribute_out(definition)
+
+
+@router.patch("/categories/{category_id}/attributes/{attribute_id}", response_model=AttributeOut)
+def update_category_attribute(
+    category_id: int,
+    attribute_id: int,
+    body: AttributeInput,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> AttributeOut:
+    _category_or_404(category_id, db)
+    definition = db.scalar(
+        select(CategoryAttribute).where(
+            CategoryAttribute.id == attribute_id, CategoryAttribute.category_id == category_id
+        )
+    )
+    if definition is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attribute definition not found")
+    name, values = _validate_attribute_input(body)
+    before = {
+        "name": definition.name,
+        "position": definition.position,
+        "allowed_values": definition.allowed_values,
+    }
+    definition.name, definition.position, definition.allowed_values = name, body.position, values
+    try:
+        db.flush()
+    except IntegrityError as error:
+        db.rollback()
+        if "category_attributes" in str(error.orig).lower():
+            _error("name", "An attribute with this name already exists")
+        raise
+    old, new = changes(before, {"name": name, "position": body.position, "allowed_values": values})
+    if old:
+        audit_service.record(
+            db,
+            module="product",
+            action="category_attribute_updated",
+            user_id=user.id,
+            username=user.username,
+            entity_type="category_attribute",
+            entity_id=str(definition.id),
+            before=old,
+            after=new,
+        )
+    db.commit()
+    return _attribute_out(definition)
+
+
+@router.delete(
+    "/categories/{category_id}/attributes/{attribute_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_category_attribute(
+    category_id: int,
+    attribute_id: int,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> None:
+    _category_or_404(category_id, db)
+    definition = db.scalar(
+        select(CategoryAttribute).where(
+            CategoryAttribute.id == attribute_id, CategoryAttribute.category_id == category_id
+        )
+    )
+    if definition is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attribute definition not found")
+    before = {"category_id": category_id, "name": definition.name}
+    db.delete(definition)
+    audit_service.record(
+        db,
+        module="product",
+        action="category_attribute_deleted",
+        user_id=user.id,
+        username=user.username,
+        entity_type="category_attribute",
+        entity_id=str(attribute_id),
+        before=before,
+    )
+    db.commit()
+
+
+@router.get("/{product_id}/variants", response_model=list[VariantOut])
+def list_variants(
+    product_id: int,
+    db: DbSession,
+    _user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_VIEW))],
+) -> list[VariantOut]:
+    product = _active_product(product_id, db)
+    quantities = _stock_checker(db, product_id) if _stock_checker else {}
+    variants = db.scalars(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product_id, ProductVariant.is_active)
+        .order_by(ProductVariant.id)
+    )
+    return [_variant_out(variant, product, quantities) for variant in variants]
+
+
+def _variant_product_and_definitions(
+    product_id: int, db: Session
+) -> tuple[Product, list[CategoryAttribute]]:
+    product = _active_product(product_id, db)
+    return product, _effective_attributes(db, product.category_id)
+
+
+def _variant_duplicate(error: IntegrityError) -> None:
+    message = str(error.orig).lower()
+    if "sku" in message or "enforce_unique_sku" in message:
+        _error("sku", "SKU already exists")
+    if "product_variants" in message and "attributes" in message:
+        _error("attributes", "Variant combination already exists")
+    raise error
+
+
+@router.post(
+    "/{product_id}/variants", response_model=VariantOut, status_code=status.HTTP_201_CREATED
+)
+def create_variant(
+    product_id: int,
+    body: VariantInput,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> VariantOut:
+    product, definitions = _variant_product_and_definitions(product_id, db)
+    if _stock_checker is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
+    quantities = _stock_checker(db, product_id)
+    if (
+        not db.scalar(select(ProductVariant.id).where(ProductVariant.product_id == product_id))
+        and quantities.get(None, 0) > 0
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Cannot add a variant while the product has existing base stock",
+        )
+    sku = body.sku.strip()
+    if not sku:
+        _error("sku", "SKU is required")
+    attributes = _normalise_variant(body.attributes, definitions)
+    if (
+        db.scalar(
+            select(ProductVariant.id).where(
+                ProductVariant.product_id == product_id,
+                ProductVariant.is_active,
+                ProductVariant.attributes == attributes,
+            )
+        )
+        is not None
+    ):
+        _error("attributes", "Variant combination already exists")
+    product_sku_exists = db.scalar(
+        select(Product.id).where(func.lower(Product.sku) == sku.casefold())
+    )
+    variant_sku_exists = db.scalar(
+        select(ProductVariant.id).where(func.lower(ProductVariant.sku) == sku.casefold())
+    )
+    if product_sku_exists is not None or variant_sku_exists is not None:
+        _error("sku", "SKU already exists")
+    variant = ProductVariant(
+        product_id=product_id, sku=sku, attributes=attributes, price=body.price
+    )
+    db.add(variant)
+    try:
+        db.flush()
+    except IntegrityError as error:
+        db.rollback()
+        _variant_duplicate(error)
+    audit_service.record(
+        db,
+        module="product",
+        action="variant_created",
+        user_id=user.id,
+        username=user.username,
+        entity_type="product_variant",
+        entity_id=str(variant.id),
+        after={"sku": sku, "attributes": attributes, "price": body.price},
+    )
+    db.commit()
+    return _variant_out(variant, product, quantities)
+
+
+@router.patch("/{product_id}/variants/{variant_id}", response_model=VariantOut)
+def update_variant(
+    product_id: int,
+    variant_id: int,
+    body: VariantInput,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> VariantOut:
+    product, definitions = _variant_product_and_definitions(product_id, db)
+    variant = db.scalar(
+        select(ProductVariant).where(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+            ProductVariant.is_active,
+        )
+    )
+    if variant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Variant not found")
+    sku = body.sku.strip()
+    if not sku:
+        _error("sku", "SKU is required")
+    attributes = _normalise_variant(body.attributes, definitions)
+    duplicate = db.scalar(
+        select(ProductVariant.id).where(
+            ProductVariant.product_id == product_id,
+            ProductVariant.id != variant_id,
+            ProductVariant.is_active,
+            ProductVariant.attributes == attributes,
+        )
+    )
+    if duplicate is not None:
+        _error("attributes", "Variant combination already exists")
+    sku_duplicate = db.scalar(
+        select(Product.id).where(func.lower(Product.sku) == sku.casefold())
+    ) or db.scalar(
+        select(ProductVariant.id).where(
+            func.lower(ProductVariant.sku) == sku.casefold(), ProductVariant.id != variant_id
+        )
+    )
+    if sku_duplicate is not None:
+        _error("sku", "SKU already exists")
+    before = {"sku": variant.sku, "attributes": variant.attributes, "price": variant.price}
+    variant.sku, variant.attributes, variant.price = sku, attributes, body.price
+    try:
+        db.flush()
+    except IntegrityError as error:
+        db.rollback()
+        _variant_duplicate(error)
+    old, new = changes(before, {"sku": sku, "attributes": attributes, "price": body.price})
+    if old:
+        action = "variant_price_updated" if set(old) == {"price"} else "variant_updated"
+        audit_service.record(
+            db,
+            module="product",
+            action=action,
+            user_id=user.id,
+            username=user.username,
+            entity_type="product_variant",
+            entity_id=str(variant.id),
+            before=old,
+            after=new,
+        )
+    db.commit()
+    return _variant_out(variant, product, _stock_checker(db, product_id) if _stock_checker else {})
+
+
+@router.delete("/{product_id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_variant(
+    product_id: int,
+    variant_id: int,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
+) -> None:
+    _active_product(product_id, db)
+    variant = db.scalar(
+        select(ProductVariant).where(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+            ProductVariant.is_active,
+        )
+    )
+    if variant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Variant not found")
+    if _stock_checker is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
+    if _stock_checker(db, product_id).get(variant_id, 0) > 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete variant with existing stock")
+    variant.is_active = False
+    audit_service.record(
+        db,
+        module="product",
+        action="variant_deleted",
+        user_id=user.id,
+        username=user.username,
+        entity_type="product_variant",
+        entity_id=str(variant.id),
+        before={"is_active": True},
+        after={"is_active": False},
+    )
+    db.commit()
+
+
 @router.get("", response_model=ProductPage)
 def list_products(
     db: DbSession,
@@ -582,7 +1048,7 @@ def delete_product(
     product = _active_product(product_id, db)
     if _stock_checker is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
-    if _stock_checker(db, product_id):
+    if any(quantity > 0 for quantity in _stock_checker(db, product_id).values()):
         raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete product with existing stock")
     product.is_active = False
     audit_service.record(
