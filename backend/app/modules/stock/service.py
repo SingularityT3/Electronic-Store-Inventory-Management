@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
+from app.modules.notifications import reevaluate_stock_alert as save_stock_alert
 from app.modules.product import ProductStockItem, product_stock_items
 from app.modules.stock._internal.models import (
     ItemCost,
@@ -89,6 +90,50 @@ def stock_positions(db: Session, *, location_id: int | None = None) -> list[Stoc
     return positions
 
 
+def reevaluate_stock_alert(
+    db: Session, *, product_id: int, variant_id: int | None, location_id: int
+) -> None:
+    """Reevaluate an item's alert after its locked stock row or threshold changes."""
+    row = db.execute(
+        select(StockLevel, Location.name)
+        .join(Location, Location.id == StockLevel.location_id)
+        .where(
+            StockLevel.product_id == product_id,
+            StockLevel.variant_id.is_not_distinct_from(variant_id),
+            StockLevel.location_id == location_id,
+            Location.is_active,
+        )
+        .with_for_update(of=StockLevel)
+    ).one_or_none()
+    if row is None:
+        return
+
+    level, location_name = row
+    item = next(
+        (
+            item
+            for item in product_stock_items(db)
+            if item.product_id == product_id and item.variant_id == variant_id
+        ),
+        None,
+    )
+    if item is None:
+        raise RuntimeError(f"Missing product metadata for stock item {(product_id, variant_id)}.")
+
+    save_stock_alert(
+        db,
+        product_id=product_id,
+        variant_id=variant_id,
+        product_name=item.product_name,
+        sku=item.sku,
+        variant_sku=item.variant_sku,
+        location_id=location_id,
+        location_name=location_name,
+        quantity=level.quantity,
+        threshold=level.reorder_threshold,
+    )
+
+
 class StockService(Protocol):
     """Operations the `stock` module offers to other modules.
 
@@ -97,6 +142,10 @@ class StockService(Protocol):
     """
 
     def positions(self, db: Session, *, location_id: int | None = None) -> list[StockPosition]: ...
+
+    def reevaluate_stock_alert(
+        self, db: Session, *, product_id: int, variant_id: int | None, location_id: int
+    ) -> None: ...
 
 
 def has_stock(db: Session, product_id: int) -> bool:
