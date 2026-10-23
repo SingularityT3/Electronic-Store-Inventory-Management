@@ -3,13 +3,14 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Literal, Protocol
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.modules.audit import audit_service
+from app.modules.notifications import reevaluate_stock_alert as save_stock_alert
 from app.modules.product import ProductStockItem, product_stock_items
 from app.modules.stock._internal.models import (
     ItemCost,
@@ -39,6 +40,26 @@ class StockPosition:
     reorder_threshold: int
     reorder_to_level: int
     average_cost: Decimal | None
+
+
+MovementType = Literal[
+    "initial", "receipt", "sale", "return", "transfer_in", "transfer_out", "adjustment"
+]
+ReasonCode = Literal["damage", "loss", "correction"]
+
+
+@dataclass(frozen=True)
+class StockUpdateResult:
+    product_id: int
+    variant_id: int | None
+    location_id: int
+    quantity_delta: int
+    previous_quantity: int
+    quantity: int
+
+
+class InsufficientStockError(Exception):
+    """Raised when an update would leave a location with negative stock."""
 
 
 @dataclass(frozen=True)
@@ -112,6 +133,170 @@ def stock_positions(db: Session, *, location_id: int | None = None) -> list[Stoc
     return positions
 
 
+def reevaluate_stock_alert(
+    db: Session, *, product_id: int, variant_id: int | None, location_id: int
+) -> None:
+    """Reevaluate an item's alert after its stock level changes."""
+    row = db.execute(
+        select(StockLevel, Location.name)
+        .join(Location, Location.id == StockLevel.location_id)
+        .where(
+            StockLevel.product_id == product_id,
+            StockLevel.variant_id.is_not_distinct_from(variant_id),
+            StockLevel.location_id == location_id,
+            Location.is_active,
+        )
+        .with_for_update(of=StockLevel)
+    ).one_or_none()
+    if row is None:
+        return
+
+    level, location_name = row
+    item = next(
+        (
+            item
+            for item in product_stock_items(db)
+            if item.product_id == product_id and item.variant_id == variant_id
+        ),
+        None,
+    )
+    if item is None:
+        raise RuntimeError(f"Missing product metadata for stock item {(product_id, variant_id)}.")
+
+    save_stock_alert(
+        db,
+        product_id=product_id,
+        variant_id=variant_id,
+        product_name=item.product_name,
+        sku=item.sku,
+        variant_sku=item.variant_sku,
+        location_id=location_id,
+        location_name=location_name,
+        quantity=level.quantity,
+        threshold=level.reorder_threshold,
+    )
+
+
+def update_stock(
+    db: Session,
+    *,
+    product_id: int,
+    variant_id: int | None,
+    location_id: int,
+    quantity_delta: int,
+    movement_type: MovementType,
+    user_id: int | None = None,
+    username: str | None = None,
+    reason_code: ReasonCode | None = None,
+    reason: str | None = None,
+    reference_type: str | None = None,
+    reference_id: int | None = None,
+    record_audit: bool = True,
+) -> StockUpdateResult:
+    """Apply one stock delta and its movement/audit in the caller's transaction."""
+    if quantity_delta == 0:
+        raise ValueError("Stock quantity delta must not be zero.")
+    if movement_type not in {
+        "initial",
+        "receipt",
+        "sale",
+        "return",
+        "transfer_in",
+        "transfer_out",
+        "adjustment",
+    }:
+        raise ValueError(f"Unsupported stock movement type: {movement_type}.")
+    if movement_type in {"initial", "receipt", "return", "transfer_in"} and quantity_delta < 0:
+        raise ValueError(f"{movement_type} movements must increase stock.")
+    if movement_type in {"sale", "transfer_out"} and quantity_delta > 0:
+        raise ValueError(f"{movement_type} movements must decrease stock.")
+
+    item_exists = any(
+        item.product_id == product_id and item.variant_id == variant_id
+        for item in product_stock_items(db)
+    )
+    if not item_exists:
+        raise ValueError("Product or variant not found.")
+
+    with db.begin_nested():
+        if quantity_delta > 0:
+            db.execute(
+                insert(StockLevel)
+                .values(
+                    product_id=product_id,
+                    variant_id=variant_id,
+                    location_id=location_id,
+                    quantity=0,
+                )
+                .on_conflict_do_nothing(
+                    constraint="uq_stock_levels_product_id_variant_id_location_id"
+                )
+            )
+
+        level = db.scalar(
+            select(StockLevel)
+            .where(
+                StockLevel.product_id == product_id,
+                StockLevel.variant_id == variant_id,
+                StockLevel.location_id == location_id,
+            )
+            .with_for_update()
+        )
+        if level is None or level.quantity + quantity_delta < 0:
+            raise InsufficientStockError("Insufficient stock.")
+
+        previous_quantity = level.quantity
+        level.quantity += quantity_delta
+        db.add(
+            StockMovement(
+                product_id=product_id,
+                variant_id=variant_id,
+                location_id=location_id,
+                quantity_change=quantity_delta,
+                movement_type=movement_type,
+                reason_code=reason_code,
+                reason=reason,
+                reference_type=reference_type,
+                reference_id=reference_id,
+                user_id=user_id,
+            )
+        )
+        db.flush()
+
+        if record_audit:
+            audit_service.record(
+                db,
+                module="stock",
+                action="stock_updated",
+                user_id=user_id,
+                username=username,
+                entity_type="stock_level",
+                entity_id=f"{product_id}:{variant_id}:{location_id}",
+                details=(
+                    f"Updated stock for product {product_id} at location {location_id} "
+                    f"by {quantity_delta} ({movement_type})."
+                ),
+                before={"quantity": previous_quantity},
+                after={"quantity": level.quantity, "quantity_delta": quantity_delta},
+            )
+            db.flush()
+
+        reevaluate_stock_alert(
+            db,
+            product_id=product_id,
+            variant_id=variant_id,
+            location_id=location_id,
+        )
+        return StockUpdateResult(
+            product_id=product_id,
+            variant_id=variant_id,
+            location_id=location_id,
+            quantity_delta=quantity_delta,
+            previous_quantity=previous_quantity,
+            quantity=level.quantity,
+        )
+
+
 def transfer_stock(
     db: Session,
     *,
@@ -129,126 +314,98 @@ def transfer_stock(
     if from_location_id == to_location_id:
         raise StockTransferError(422, "Source and destination locations must be different.")
 
-    with db.begin_nested():
-        locations = db.scalars(
-            select(Location)
-            .where(Location.id.in_((from_location_id, to_location_id)), Location.is_active)
-            .order_by(Location.id)
-            .with_for_update()
-        ).all()
-        if len(locations) != 2:
-            raise StockTransferError(404, "An active source or destination location was not found.")
-
-        item_exists = any(
-            item.product_id == product_id and item.variant_id == variant_id
-            for item in product_stock_items(db)
-        )
-        if not item_exists:
-            raise StockTransferError(404, "Product or variant not found.")
-
-        for location_id in sorted((from_location_id, to_location_id)):
-            db.execute(
-                insert(StockLevel)
-                .values(
-                    product_id=product_id,
-                    variant_id=variant_id,
-                    location_id=location_id,
-                    quantity=0,
+    try:
+        with db.begin_nested():
+            locations = db.scalars(
+                select(Location)
+                .where(Location.id.in_((from_location_id, to_location_id)), Location.is_active)
+                .order_by(Location.id)
+                .with_for_update()
+            ).all()
+            if len(locations) != 2:
+                raise StockTransferError(
+                    404, "An active source or destination location was not found."
                 )
-                .on_conflict_do_nothing(
-                    constraint="uq_stock_levels_product_id_variant_id_location_id"
-                )
+
+            item_exists = any(
+                item.product_id == product_id and item.variant_id == variant_id
+                for item in product_stock_items(db)
+            )
+            if not item_exists:
+                raise StockTransferError(404, "Product or variant not found.")
+
+            transfer = StockTransfer(
+                product_id=product_id,
+                variant_id=variant_id,
+                from_location_id=from_location_id,
+                to_location_id=to_location_id,
+                quantity=quantity,
+                user_id=user_id,
+            )
+            db.add(transfer)
+            db.flush()
+
+            source = update_stock(
+                db,
+                product_id=product_id,
+                variant_id=variant_id,
+                location_id=from_location_id,
+                quantity_delta=-quantity,
+                movement_type="transfer_out",
+                user_id=user_id,
+                username=username,
+                reference_type="stock_transfer",
+                reference_id=transfer.id,
+                record_audit=False,
+            )
+            destination = update_stock(
+                db,
+                product_id=product_id,
+                variant_id=variant_id,
+                location_id=to_location_id,
+                quantity_delta=quantity,
+                movement_type="transfer_in",
+                user_id=user_id,
+                username=username,
+                reference_type="stock_transfer",
+                reference_id=transfer.id,
+                record_audit=False,
             )
 
-        levels = db.scalars(
-            select(StockLevel)
-            .where(
-                StockLevel.product_id == product_id,
-                StockLevel.variant_id == variant_id,
-                StockLevel.location_id.in_((from_location_id, to_location_id)),
+            audit_service.record(
+                db,
+                module="stock",
+                action="stock_transferred",
+                user_id=user_id,
+                username=username,
+                entity_type="stock_transfer",
+                entity_id=str(transfer.id),
+                details=(
+                    f"Transferred {quantity} units of product {product_id} "
+                    f"from location {from_location_id} to location {to_location_id}."
+                ),
+                before={
+                    "from_quantity": source.previous_quantity,
+                    "to_quantity": destination.previous_quantity,
+                },
+                after={
+                    "from_quantity": source.quantity,
+                    "to_quantity": destination.quantity,
+                },
             )
-            .order_by(StockLevel.location_id)
-            .with_for_update()
-        ).all()
-        levels_by_location = {level.location_id: level for level in levels}
-        source = levels_by_location[from_location_id]
-        destination = levels_by_location[to_location_id]
+            db.flush()
 
-        if source.quantity < quantity:
-            raise StockTransferError(409, "Insufficient stock at the source location.")
-
-        transfer = StockTransfer(
-            product_id=product_id,
-            variant_id=variant_id,
-            from_location_id=from_location_id,
-            to_location_id=to_location_id,
-            quantity=quantity,
-            user_id=user_id,
-        )
-        db.add(transfer)
-        db.flush()
-
-        source_before = source.quantity
-        destination_before = destination.quantity
-        source.quantity -= quantity
-        destination.quantity += quantity
-        db.add_all(
-            [
-                StockMovement(
-                    product_id=product_id,
-                    variant_id=variant_id,
-                    location_id=from_location_id,
-                    quantity_change=-quantity,
-                    movement_type="transfer_out",
-                    reference_type="stock_transfer",
-                    reference_id=transfer.id,
-                    user_id=user_id,
-                ),
-                StockMovement(
-                    product_id=product_id,
-                    variant_id=variant_id,
-                    location_id=to_location_id,
-                    quantity_change=quantity,
-                    movement_type="transfer_in",
-                    reference_type="stock_transfer",
-                    reference_id=transfer.id,
-                    user_id=user_id,
-                ),
-            ]
-        )
-        db.flush()
-        audit_service.record(
-            db,
-            module="stock",
-            action="stock_transferred",
-            user_id=user_id,
-            username=username,
-            entity_type="stock_transfer",
-            entity_id=str(transfer.id),
-            details=(
-                f"Transferred {quantity} units of product {product_id} "
-                f"from location {from_location_id} to location {to_location_id}."
-            ),
-            before={
-                "from_quantity": source_before,
-                "to_quantity": destination_before,
-            },
-            after={
-                "from_quantity": source.quantity,
-                "to_quantity": destination.quantity,
-            },
-        )
-        db.flush()
-
-        return StockTransferResult(
-            id=transfer.id,
-            product_id=product_id,
-            variant_id=variant_id,
-            from_location_id=from_location_id,
-            to_location_id=to_location_id,
-            quantity=quantity,
-            created_at=transfer.created_at,
-        )
+            return StockTransferResult(
+                id=transfer.id,
+                product_id=product_id,
+                variant_id=variant_id,
+                from_location_id=from_location_id,
+                to_location_id=to_location_id,
+                quantity=quantity,
+                created_at=transfer.created_at,
+            )
+    except InsufficientStockError as exc:
+        raise StockTransferError(409, "Insufficient stock at the source location.") from exc
 
 
 class StockService(Protocol):
@@ -259,6 +416,28 @@ class StockService(Protocol):
     """
 
     def positions(self, db: Session, *, location_id: int | None = None) -> list[StockPosition]: ...
+
+    def reevaluate_stock_alert(
+        self, db: Session, *, product_id: int, variant_id: int | None, location_id: int
+    ) -> None: ...
+
+    def update(
+        self,
+        db: Session,
+        *,
+        product_id: int,
+        variant_id: int | None,
+        location_id: int,
+        quantity_delta: int,
+        movement_type: MovementType,
+        user_id: int | None = None,
+        username: str | None = None,
+        reason_code: ReasonCode | None = None,
+        reason: str | None = None,
+        reference_type: str | None = None,
+        reference_id: int | None = None,
+        record_audit: bool = True,
+    ) -> StockUpdateResult: ...
 
     def transfer(
         self,
