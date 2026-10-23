@@ -1,4 +1,3 @@
-
 """Public service interface of the `stock` module."""
 
 from dataclasses import dataclass
@@ -37,9 +36,7 @@ class StockPosition:
     average_cost: Decimal | None
 
 
-def stock_positions(
-    db: Session, *, location_id: int | None = None
-) -> list[StockPosition]:
+def stock_positions(db: Session, *, location_id: int | None = None) -> list[StockPosition]:
     """Read live stock with product metadata and cost through owning module interfaces."""
     query = (
         select(StockLevel, Location.name)
@@ -60,9 +57,7 @@ def stock_positions(
     }
 
     positions = []
-    for level, location_name in db.execute(
-        query.order_by(Location.name, StockLevel.id)
-    ):
+    for level, location_name in db.execute(query.order_by(Location.name, StockLevel.id)):
         key = (level.product_id, level.variant_id)
         item = item_metadata.get(key)
         if item is None:
@@ -101,9 +96,7 @@ class StockService(Protocol):
     never on `_internal`.
     """
 
-    def positions(
-        self, db: Session, *, location_id: int | None = None
-    ) -> list[StockPosition]: ...
+    def positions(self, db: Session, *, location_id: int | None = None) -> list[StockPosition]: ...
 
 
 def has_stock(db: Session, product_id: int) -> bool:

@@ -1,4 +1,3 @@
-
 import { Route, Routes } from 'react-router-dom';
 import { AuditLogPage } from './modules/audit';
 import {
@@ -17,13 +16,7 @@ import {
 } from './modules/product';
 import { SalesAvailabilityPage } from './modules/sales';
 import { StockLevelsPage } from './modules/stock';
-import {
-  AppLayout,
-  DashboardPage,
-  NAV_ITEMS,
-  NotFoundPage,
-  PlaceholderPage,
-} from './shell';
+import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
 export default function App() {

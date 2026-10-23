@@ -65,8 +65,6 @@ def product_stock_items(db: Session) -> list[ProductStockItem]:
             )
     return items
 
-from sqlalchemy.orm import Session
-
 
 class ProductService(Protocol):
     """Operations the `product` module offers to other modules.
