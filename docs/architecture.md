@@ -144,6 +144,19 @@ for the product or one of its variants. The product module depends on the public
 interface only; `app/main.py` wires it to the stock module's implementation, so product never
 imports stock internals.
 
+Variants are managed under `/api/product/{product_id}/variants`. Reads require `products.view`;
+creation, edits, and soft deletion require `products.manage`. Variant attributes are normalized
+case-insensitively, validated against the effective category attribute definitions, and expose
+variant-specific stock and effective price. Duplicate combinations and SKUs are field errors.
+The stock interface returns a quantity map keyed by variant ID (with `null` for base stock), so
+the product module can keep variant stock independent and block deletion when that variant has
+stock. Variant and category-attribute changes are audited in the same transaction.
+
+Reusable attribute definitions are managed at
+`/api/product/categories/{category_id}/attributes`; definitions inherit through category
+ancestors, with the nearest definition winning. Deleting a definition does not change existing
+variants.
+
 Categories are managed by the product module at `/api/product/categories`. The flat category
 response is in tree order and includes ancestor paths, direct active-product counts, and
 roll-up counts for all active products in descendants. The category product endpoint uses a
