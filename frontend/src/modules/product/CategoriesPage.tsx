@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../../api';
 import {
   Breadcrumb,
@@ -191,6 +191,7 @@ export default function CategoriesPage() {
             }))}
           />
           <h2>{selected.name} products</h2>
+          <Link to={`/categories/${selected.id}/attributes`}>Manage attributes</Link>{' '}
           <button type="button" onClick={() => setConfirm(true)}>
             Delete category
           </button>
