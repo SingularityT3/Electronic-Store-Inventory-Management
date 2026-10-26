@@ -64,6 +64,29 @@ services:
     volumes:
       - product-images:/data/product-images
 
+  monitor:
+    image: esims-backend:prod
+    restart: unless-stopped
+    command: ["python", "-m", "scripts.uptime", "watch"]
+    environment:
+      MONITOR_HEALTH_URL: http://backend:8000/api/health
+      MONITOR_LOG_PATH: /data/uptime/checks.jsonl
+      MONITOR_TIMEZONE: ${MONITOR_TIMEZONE:-UTC}
+      MONITOR_STORE_HOURS: ${MONITOR_STORE_HOURS:-09:00-21:00}
+      MONITOR_STORE_DAYS: ${MONITOR_STORE_DAYS:-0,1,2,3,4,5,6}
+      MONITOR_ALERT_TO: ${MONITOR_ALERT_TO:-}
+      MONITOR_WEBHOOK_URL: ${MONITOR_WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_FROM: ${SMTP_FROM:-ESIMS <no-reply@esims.local>}
+    volumes:
+      - uptime-data:/data/uptime
+    depends_on:
+      - backend
+
   web:
     image: esims-web:prod
     build:
@@ -87,3 +110,4 @@ volumes:
   db-data:
   caddy-data:
   product-images:
+  uptime-data:

@@ -1,5 +1,7 @@
 """FastAPI application factory."""
 
+import logging
+import time
 from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
@@ -17,6 +19,9 @@ from app.modules.reporting.router import router as reporting_router
 from app.modules.sales.router import router as sales_router
 from app.modules.stock.router import router as stock_router
 from app.modules.stock.service import location_exists, stock_quantities
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+logger = logging.getLogger("esims.request")
 
 # Routes anyone may call. Every other route must declare a permission (SEC-AZ-1).
 PUBLIC_PATHS = {
@@ -38,11 +43,41 @@ async def no_store(
     return response
 
 
+async def log_requests(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Log method, path, status and duration of every request; log unhandled errors (NFR-4)."""
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed = (time.perf_counter() - started) * 1000
+        logger.exception(
+            "%s %s failed with an unhandled error after %.0f ms",
+            request.method,
+            request.url.path,
+            elapsed,
+        )
+        raise
+    elapsed = (time.perf_counter() - started) * 1000
+    level = logging.ERROR if response.status_code >= 500 else logging.INFO
+    logger.log(
+        level,
+        "%s %s -> %d in %.0f ms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed,
+    )
+    return response
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="ESIMS")
     set_stock_checker(stock_quantities)
     set_location_validator(location_exists)
     app.middleware("http")(no_store)
+    app.middleware("http")(log_requests)
     api = APIRouter(prefix="/api")
     # Public: health check, and the auth routes (each protects itself as needed).
     api.include_router(health.router)
