@@ -16,7 +16,7 @@ import {
   ProductViewPage,
 } from './modules/product';
 import { SalesAvailabilityPage } from './modules/sales';
-import { StockLevelsPage, StockTransferPage } from './modules/stock';
+import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import { PurchaseOrdersPage, SuppliersPage } from './modules/purchasing';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
@@ -102,8 +102,17 @@ export default function App() {
               <AuditLogPage />
             ) : item.path === '/users' ? (
               <UsersPage />
-            ) : item.path === '/stock' ? (
+            ) : item.path === '/stock' || item.path === '/stock/adjust' ? (
+              // Adjustments start from a stock record (UC-08), so both items open stock levels.
               <StockLevelsPage />
+            ) : item.path === '/locations' ? (
+              <LocationsPage />
+            ) : item.path === '/variants' ? (
+              // Variants are managed on each product's page (UC-06).
+              <ProductListPage
+                title="Variants"
+                intro="Open a product to add, edit or remove its variants."
+              />
             ) : item.path === '/stock/transfer' ? (
               <StockTransferPage />
             ) : item.path === '/sales' ? (

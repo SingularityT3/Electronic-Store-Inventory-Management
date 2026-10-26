@@ -215,9 +215,29 @@ password hash, issues the existing single-use, time-limited password-reset token
 emails only its setup link; the API never returns or audits a password or token. A
 deactivation is retained rather than hard-deleted, revokes all sessions immediately, and
 is recorded with the before/after active state. An Admin cannot disable or demote
-themselves or the last active Admin.
+themselves or the last active Admin. An Admin can unlock an account locked after failed
+logins before the lockout expires (`POST /api/auth/users/{id}/unlock`, SRS A-12); listings
+report `is_locked`, and the unlock is audited as `user_unlocked`.
 
-Locations remain owned by `stock`. The stock module exposes an Admin-readable
-`/api/stock/locations` endpoint and a public service-level location validator; the
+Locations remain owned by `stock`. The stock module exposes `/api/stock/locations` (active
+locations in the caller's scope) and a public service-level location validator; the
 composition root wires that validator into auth. Auth therefore validates location IDs
-without importing stock internals or touching stock tables.
+without importing stock internals or touching stock tables. Admins and Managers manage
+locations on the `/locations` screen (`locations.manage`), backed by
+`GET /api/stock/locations/all` (inactive ones included) and the create/update routes, which
+record `location_created` and `location_updated`.
+
+## Stock items
+
+`product.product_stock_items(db, product_ids=None)` lists, for every product, its base item
+(`variant_id` null) and each of its variants, with `is_active` saying whether the item may take
+new stock: an active variant of an active product, or the base item of an active product with no
+active variants. Display paths (stock levels, POS availability, reports, PO and supplier
+catalog lines) resolve labels for any item, so rows made before a product gained variants or
+was deleted still show; empty rows of inactive items are left out of stock screens. New stock
+(`update_stock` increases, transfers), reorder settings, PO lines and supplier catalog entries
+require an active item. A variant cannot be added while the product has base stock, and
+deleting a product or variant, or adding a product's first variant, resolves the now stale
+low/out-of-stock alerts through `notifications.resolve_stock_alerts`. Reorder threshold changes
+are audited as `reorder_settings_updated`; the Stock levels screen edits them per item and
+location.

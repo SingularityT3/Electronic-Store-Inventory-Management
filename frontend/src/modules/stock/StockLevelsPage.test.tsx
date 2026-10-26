@@ -17,6 +17,8 @@ const LEVELS = [
     location_name: 'Chennai',
     quantity: 50,
     total_quantity: 250,
+    reorder_threshold: 5,
+    reorder_to_level: 10,
   },
   {
     product_id: 1,
@@ -31,6 +33,8 @@ const LEVELS = [
     location_name: 'Chennai',
     quantity: 7,
     total_quantity: 20,
+    reorder_threshold: 0,
+    reorder_to_level: 0,
   },
   {
     product_id: 2,
@@ -45,6 +49,8 @@ const LEVELS = [
     location_name: 'Bengaluru',
     quantity: 200,
     total_quantity: 200,
+    reorder_threshold: 20,
+    reorder_to_level: 40,
   },
 ];
 
@@ -77,6 +83,9 @@ function mockApi(
         adjustCalls.push(init ?? {});
         status = adjustStatus;
         body = adjustBody;
+      } else if (url === '/api/stock/levels/reorder-settings') {
+        adjustCalls.push(init ?? {});
+        body = {};
       } else if (url.includes('/stock/levels')) {
         body = LEVELS;
       } else {
@@ -196,4 +205,38 @@ test('shows the API error when the adjustment would go negative', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Adjustment would result in negative stock',
   );
+});
+
+test('saves reorder settings for a stock record', async () => {
+  const user = userEvent.setup();
+  const calls = mockApi(['stock.view', 'stock.adjust']);
+  renderPage();
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Reorder settings for Test Laptop (LAPTOP-1) at Bengaluru',
+    }),
+  );
+  const threshold = screen.getByLabelText('Reorder threshold');
+  expect(threshold).toHaveValue(20);
+  // 40 is the default (twice the threshold), so the field starts blank.
+  expect(screen.getByLabelText('Reorder-to level')).toHaveValue(null);
+  await user.clear(threshold);
+  await user.type(threshold, '30');
+  await user.type(screen.getByLabelText('Reorder-to level'), '25');
+  await user.click(screen.getByRole('button', { name: 'Save reorder settings' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('at or above the threshold');
+  expect(calls).toHaveLength(0);
+
+  await user.clear(screen.getByLabelText('Reorder-to level'));
+  await user.type(screen.getByLabelText('Reorder-to level'), '80');
+  await user.click(screen.getByRole('button', { name: 'Save reorder settings' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Reorder settings saved');
+  expect(calls[0].method).toBe('PATCH');
+  expect(JSON.parse(String(calls[0].body))).toEqual({
+    product_id: 2,
+    variant_id: null,
+    location_id: 2,
+    reorder_threshold: 30,
+    reorder_to_level: 80,
+  });
 });

@@ -19,7 +19,7 @@ const MANAGER = {
   permissions: ['stock.view'] as const,
 };
 
-function backend(role: 'admin' | 'manager' = 'admin') {
+function backend(role: 'admin' | 'manager' = 'admin', locked = false) {
   let users = [
     {
       id: 2,
@@ -29,6 +29,7 @@ function backend(role: 'admin' | 'manager' = 'admin') {
       role: 'manager',
       location_id: null,
       is_active: true,
+      is_locked: locked,
     },
   ];
   const fetch = vi.fn((url: string, init?: RequestInit) => {
@@ -37,7 +38,7 @@ function backend(role: 'admin' | 'manager' = 'admin') {
     if (url === '/api/auth/me') return Promise.resolve(reply(200, signedIn));
     if (url === '/api/stock/locations')
       return Promise.resolve(reply(200, [{ id: 1, name: 'Main Store', type: 'store' }]));
-    if (url === '/api/auth/users' && (!init || init.method === 'GET')) {
+    if (url.startsWith('/api/auth/users?') && (!init || init.method === 'GET')) {
       return Promise.resolve(reply(200, { users, total: users.length, limit: 50, offset: 0 }));
     }
     if (url === '/api/auth/users' && init?.method === 'POST') {
@@ -46,6 +47,10 @@ function backend(role: 'admin' | 'manager' = 'admin') {
       }
       users = [{ ...body, id: 3, is_active: true }, ...users];
       return Promise.resolve(reply(201, users[0]));
+    }
+    if (url === '/api/auth/users/2/unlock' && init?.method === 'POST') {
+      users = users.map((user) => ({ ...user, is_locked: false }));
+      return Promise.resolve(reply(200, users[0]));
     }
     if (url.includes('/deactivate')) {
       users = users.map((user) => ({ ...user, is_active: false }));
@@ -94,5 +99,17 @@ test('Manager opening users sees Access denied', async () => {
   renderUsers('manager');
   await waitFor(() =>
     expect(screen.getByRole('heading', { name: 'Access denied' })).toBeInTheDocument(),
+  );
+});
+
+test('Admin sees a locked account and unlocks it', async () => {
+  backend('admin', true);
+  renderUsers();
+  const table = await screen.findByRole('table', { name: 'Users' });
+  expect(table).toHaveTextContent('Locked');
+  await userEvent.click(screen.getByRole('button', { name: 'Unlock priya' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Manager Priya can sign in again.');
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Unlock priya' })).not.toBeInTheDocument(),
   );
 });

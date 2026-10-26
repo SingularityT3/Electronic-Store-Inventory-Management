@@ -244,6 +244,20 @@ export default function ProductViewPage() {
                 />
               )}
             </FormField>
+            {attributes.length === 0 && (
+              <p>
+                This category has no variant attributes yet.{' '}
+                <Link to={`/categories/${product.category_id}/attributes`}>
+                  Define attributes such as Color or Storage
+                </Link>{' '}
+                before adding variants.
+              </p>
+            )}
+            {attributes.length === 0 && variantErrors.attributes && (
+              <p role="alert" className="error">
+                {variantErrors.attributes}
+              </p>
+            )}
             {attributes.map((attribute) => (
               <FormField key={attribute.id} label={attribute.name} error={variantErrors.attributes}>
                 {(props) =>
@@ -294,7 +308,9 @@ export default function ProductViewPage() {
                 />
               )}
             </FormField>
-            <button type="submit">{editing ? 'Save changes' : 'Add variant'}</button>
+            <button type="submit" disabled={attributes.length === 0}>
+              {editing ? 'Save changes' : 'Add variant'}
+            </button>
             {editing && (
               <button type="button" onClick={() => beginVariant()}>
                 Cancel

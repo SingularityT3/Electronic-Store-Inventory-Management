@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../api';
 import {
   ConfirmDialog,
@@ -20,6 +20,8 @@ interface ManagedUser {
   role: Role;
   location_id: number | null;
   is_active: boolean;
+  /** Locked after repeated failed logins (SRS A-12). */
+  is_locked: boolean;
 }
 
 interface UserPage {
@@ -53,6 +55,8 @@ const EMPTY_FORM: FormState = {
   is_active: true,
 };
 
+const PAGE_SIZE = 50;
+
 const ROLE_LABELS: Record<Role, string> = {
   admin: 'Admin',
   manager: 'Manager',
@@ -75,6 +79,7 @@ export default function UsersPage() {
   const { user: signedInUser } = useAuth();
   const allowed = can(signedInUser, 'users.manage');
   const [page, setPage] = useState<UserPage | null>(null);
+  const [offset, setOffset] = useState(0);
   const [locations, setLocations] = useState<Location[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
@@ -84,19 +89,19 @@ export default function UsersPage() {
   const [confirming, setConfirming] = useState<ManagedUser | null>(null);
   const needsLocation = form.role === 'staff' || form.role === 'cashier';
 
-  async function load() {
+  const load = useCallback(async () => {
     const [users, availableLocations] = await Promise.all([
-      api<UserPage>('/auth/users'),
+      api<UserPage>(`/auth/users?limit=${PAGE_SIZE}&offset=${offset}`),
       api<Location[]>('/stock/locations'),
     ]);
     setPage(users);
     setLocations(availableLocations);
-  }
+  }, [offset]);
 
   useEffect(() => {
     if (!allowed) return;
     load().catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load users.'));
-  }, [allowed]);
+  }, [allowed, load]);
 
   function change<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -129,7 +134,8 @@ export default function UsersPage() {
       username: form.username,
       email: form.email,
       role: form.role,
-      location_id: form.location_id ? Number(form.location_id) : null,
+      // Only Staff and Cashier have a location; other roles see all locations (SRS A-9).
+      location_id: needsLocation && form.location_id ? Number(form.location_id) : null,
       ...(editing ? { is_active: form.is_active } : {}),
     };
     try {
@@ -167,6 +173,18 @@ export default function UsersPage() {
     }
   }
 
+  async function unlock(account: ManagedUser) {
+    setError('');
+    setSuccess('');
+    try {
+      await api(`/auth/users/${account.id}/unlock`, { method: 'POST' });
+      setSuccess(`${account.full_name} can sign in again.`);
+      await load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not unlock the user.');
+    }
+  }
+
   const columns: Column<ManagedUser>[] = [
     { header: 'Name', cell: (account) => account.full_name },
     { header: 'Username', cell: (account) => account.username },
@@ -177,7 +195,11 @@ export default function UsersPage() {
       cell: (account) =>
         locations.find((location) => location.id === account.location_id)?.name ?? 'All locations',
     },
-    { header: 'Status', cell: (account) => (account.is_active ? 'Active' : 'Disabled') },
+    {
+      header: 'Status',
+      cell: (account) =>
+        !account.is_active ? 'Disabled' : account.is_locked ? 'Locked' : 'Active',
+    },
     {
       header: 'Actions',
       cell: (account) => (
@@ -188,6 +210,18 @@ export default function UsersPage() {
           <button type="button" onClick={() => setConfirming(account)}>
             {account.is_active ? 'Deactivate' : 'Reactivate'}
           </button>
+          {account.is_locked && (
+            <>
+              {' '}
+              <button
+                type="button"
+                aria-label={`Unlock ${account.username}`}
+                onClick={() => unlock(account)}
+              >
+                Unlock
+              </button>
+            </>
+          )}
         </>
       ),
     },
@@ -304,6 +338,27 @@ export default function UsersPage() {
         />
       ) : (
         <EmptyState message="Loading users…" />
+      )}
+      {page && page.total > PAGE_SIZE && (
+        <div className="pager">
+          <button
+            type="button"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
+            Previous
+          </button>
+          <span>
+            Page {offset / PAGE_SIZE + 1} of {Math.ceil(page.total / PAGE_SIZE)}
+          </span>
+          <button
+            type="button"
+            disabled={offset + PAGE_SIZE >= page.total}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
+            Next
+          </button>
+        </div>
       )}
       <ConfirmDialog
         open={confirming !== null}

@@ -25,12 +25,13 @@ const MAX_IMAGE_BYTES = Number(import.meta.env.VITE_PRODUCT_IMAGE_MAX_BYTES ?? 5
 
 function detailErrors(error: unknown): Record<string, string> {
   if (!(error instanceof ApiError)) return {};
-  if (Object.keys(error.fields).length > 0 && 'field' in error.fields) {
+  if ('field' in error.fields) {
     const field = error.fields.field;
     const message = error.fields.message;
     return typeof field === 'string' && typeof message === 'string' ? { [field]: message } : {};
   }
-  return {};
+  // Request validation errors arrive keyed by field name, e.g. a negative price.
+  return error.fields;
 }
 
 export default function ProductFormPage() {
@@ -89,6 +90,7 @@ export default function ProductFormPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setMessage('');
     setErrors({});
     try {
       const body = { ...values, category_id: Number(values.category_id), price: values.price };
@@ -99,7 +101,7 @@ export default function ProductFormPage() {
         navigate(`/products/${product.id}/edit`, {
           state: { message: 'Product added successfully' },
         });
-      } else navigate(`/products/${product.id}/edit`);
+      } else setMessage('Product saved successfully');
     } catch (e) {
       const mapped = detailErrors(e);
       if (Object.keys(mapped).length) setErrors(mapped);

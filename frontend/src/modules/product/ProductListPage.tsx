@@ -9,7 +9,13 @@ import ProductFilters from './ProductFilters';
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const PAGE_SIZE = 50;
 
-export default function ProductListPage() {
+export default function ProductListPage({
+  title = 'Products',
+  intro,
+}: {
+  title?: string;
+  intro?: string;
+} = {}) {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
@@ -55,13 +61,14 @@ export default function ProductListPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>Products</h1>
+        <h1>{title}</h1>
         {can(user, 'products.manage') && (
           <Link to="/products/new">
             <button type="button">Add product</button>
           </Link>
         )}
       </header>
+      {intro && <p>{intro}</p>}
       <SearchBox
         value={query}
         onSearch={(value) => {
