@@ -28,12 +28,13 @@ service (UptimeRobot, Better Stack, Uptime Kuma on another host) at `https://<SI
 with email/chat alerts, or run the `monitor` container on a different host with `MONITOR_HEALTH_URL`
 set to the public URL.
 
-### Backup failures (#36)
+### Backup failures
 
-The backup job should call this when it fails:
+The `backup` service sends its failure and "overdue" alerts through these same channels; see
+[`backup-recovery.md`](backup-recovery.md). To send a test alert:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm monitor python -m scripts.uptime alert "Database backup failed"
+docker compose -f docker-compose.prod.yml run --rm monitor python -m scripts.uptime alert "Test alert"
 ```
 
 ## Reporting uptime

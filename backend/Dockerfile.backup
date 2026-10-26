@@ -1,0 +1,12 @@
+# Backup job: pg_dump / pg_restore (same major version as the db service) plus the stdlib-only
+# scripts. Build context: ./backend.
+FROM postgres:16-alpine
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apk add --no-cache python3 tzdata
+WORKDIR /app
+COPY scripts ./scripts
+
+# Runs as root so it can write to whatever storage is mounted at /backups.
+RUN mkdir -p /backups /data/product-images
+CMD ["python3", "-m", "scripts.backup", "watch"]
