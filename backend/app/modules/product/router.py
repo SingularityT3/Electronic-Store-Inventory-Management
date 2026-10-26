@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service, changes
 from app.modules.auth import CurrentUser, Permission, require
+from app.modules.notifications import resolve_stock_alerts
 from app.modules.product._internal.models import (
     Category,
     CategoryAttribute,
@@ -761,10 +762,8 @@ def create_variant(
     if _stock_checker is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock service unavailable")
     quantities = _stock_checker(db, product_id).get(product_id, {})
-    if (
-        not db.scalar(select(ProductVariant.id).where(ProductVariant.product_id == product_id))
-        and quantities.get(None, 0) > 0
-    ):
+    # Once a product has variants its stock is held per variant, so base stock must go first.
+    if quantities.get(None, 0) > 0:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Cannot add a variant while the product has existing base stock",
@@ -811,6 +810,7 @@ def create_variant(
         entity_id=str(variant.id),
         after={"sku": sku, "attributes": attributes, "price": body.price},
     )
+    resolve_stock_alerts(db, product_id=product_id, variant_ids=[None])
     db.commit()
     return _variant_out(variant, product, quantities)
 
@@ -907,6 +907,7 @@ def delete_variant(
     if _stock_checker(db, product_id).get(product_id, {}).get(variant_id, 0) > 0:
         raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete variant with existing stock")
     variant.is_active = False
+    resolve_stock_alerts(db, product_id=product_id, variant_ids=[variant_id])
     audit_service.record(
         db,
         module="product",
@@ -1191,6 +1192,7 @@ def delete_product(
     ):
         raise HTTPException(status.HTTP_409_CONFLICT, "Cannot delete product with existing stock")
     product.is_active = False
+    resolve_stock_alerts(db, product_id=product_id)
     audit_service.record(
         db,
         module="product",

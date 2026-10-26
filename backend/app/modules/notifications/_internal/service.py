@@ -1,8 +1,9 @@
 """Stock-alert state management owned by the `notifications` module."""
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.notifications._internal.models import Notification, StockAlert
@@ -86,6 +87,29 @@ def reevaluate_stock_alert(
 
     db.flush()
     return _alert_data(alert) if alert_type is not None else None
+
+
+def resolve_stock_alerts(
+    db: Session, *, product_id: int, variant_ids: Iterable[int | None] | None = None
+) -> None:
+    """Clear the alerts of items that no longer hold stock: a deleted product (all its items,
+    when `variant_ids` is None), deleted variants, or a base product that gained variants."""
+    query = select(StockAlert).where(
+        StockAlert.product_id == product_id, StockAlert.alert_type.is_not(None)
+    )
+    if variant_ids is not None:
+        ids = list(variant_ids)
+        query = query.where(
+            or_(
+                StockAlert.variant_id.in_([i for i in ids if i is not None]),
+                StockAlert.variant_id.is_(None) if None in ids else false(),
+            )
+        )
+    now = datetime.now(UTC)
+    for alert in db.scalars(query.with_for_update()):
+        alert.alert_type = None
+        alert.resolved_at = now
+    db.flush()
 
 
 def active_stock_alerts(db: Session, *, location_id: int | None = None) -> list[StockAlertData]:

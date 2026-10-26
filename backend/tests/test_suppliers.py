@@ -270,3 +270,20 @@ def test_staff_and_cashier_are_denied_supplier_management(client, make_user, rol
         == 403
     )
     assert client.delete(f"/api/purchasing/suppliers/{supplier['id']}").status_code == 403
+
+
+def test_blank_supplier_name_is_a_validation_error_and_blank_fields_are_cleared(client, make_user):
+    client = manager(client, make_user, "manager")
+    assert client.post("/api/purchasing/suppliers", json={"name": "   "}).status_code == 422
+    supplier = client.post(
+        "/api/purchasing/suppliers", json={"name": " Blank Fields ", "email": " ", "phone": ""}
+    )
+    assert supplier.status_code == 201, supplier.text
+    assert (supplier.json()["name"], supplier.json()["email"], supplier.json()["phone"]) == (
+        "Blank Fields",
+        None,
+        None,
+    )
+    supplier_id = supplier.json()["id"]
+    rename = client.patch(f"/api/purchasing/suppliers/{supplier_id}", json={"name": " "})
+    assert rename.status_code == 422

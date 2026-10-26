@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from app.modules.audit._internal.models import AuditLog
 from app.modules.notifications._internal.models import StockAlert
 from app.modules.product._internal.models import Category, Product
 from app.modules.reporting.service import reorder_rows
@@ -138,3 +139,19 @@ def test_threshold_changes_reevaluate_immediately_and_cashier_is_denied(client, 
     make_user("alert_threshold_cashier", role="cashier", location_id=location.id)
     assert login(client, "alert_threshold_cashier").status_code == 200
     assert client.get("/api/notifications/alerts").status_code == 403
+
+
+def test_threshold_above_saved_reorder_to_level_is_a_validation_error(client, make_user, db):
+    product, location, _, level = create_alert_item(db, quantity=12, threshold=5)
+    level.reorder_to_level = 10
+    db.commit()
+    make_user("alert_reorder_to_manager", role="manager")
+    assert login(client, "alert_reorder_to_manager").status_code == 200
+    payload = {"product_id": product.id, "location_id": location.id, "reorder_threshold": 20}
+    response = client.patch("/api/stock/levels/reorder-settings", json=payload)
+    assert response.status_code == 422, response.text
+    payload["reorder_to_level"] = 40
+    response = client.patch("/api/stock/levels/reorder-settings", json=payload)
+    assert response.status_code == 200, response.text
+    actions = db.scalars(select(AuditLog.action)).all()
+    assert "reorder_settings_updated" in actions

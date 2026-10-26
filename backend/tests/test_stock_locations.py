@@ -1,7 +1,9 @@
 """Location management API (Issue #14)."""
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.audit._internal.models import AuditLog
 from app.modules.stock._internal.models import Location
 from tests.helpers import login
 
@@ -123,3 +125,23 @@ def test_edit_location_rejects_duplicate_name_and_nonexistent_id(client, make_us
     assert unchanged.json()["name"] == "First Store"
     missing = admin.patch("/api/stock/locations/999999", json={"name": "Missing"})
     assert missing.status_code == 404
+
+
+def test_location_changes_are_audited_and_listed_with_inactive_ones(client, make_user, db):
+    admin = signed_in_client(client, make_user, "admin", "admin_location_audit")
+    created = admin.post("/api/stock/locations", json={"name": "Audit Store", "type": "store"})
+    assert created.status_code == 201, created.text
+    location_id = created.json()["id"]
+    closed = admin.patch(f"/api/stock/locations/{location_id}", json={"is_active": False})
+    assert closed.status_code == 200
+    duplicate = admin.post("/api/stock/locations", json={"name": "Audit Store", "type": "store"})
+    assert duplicate.status_code == 409
+
+    listed = admin.get("/api/stock/locations/all").json()
+    assert any(row["id"] == location_id and row["is_active"] is False for row in listed)
+    assert all(row["id"] != location_id for row in admin.get("/api/stock/locations").json())
+    actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_type == "location")).all()
+    assert actions == ["location_created", "location_updated"]
+
+    signed_in_client(client, make_user, "staff", "staff_location_audit", location_id=location_id)
+    assert client.get("/api/stock/locations/all").status_code == 403

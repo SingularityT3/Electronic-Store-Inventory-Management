@@ -372,3 +372,27 @@ def test_admin_can_manage_purchase_orders_staff_and_cashier_are_denied(client, m
         client.post("/api/auth/logout")
 
     assert admin.role == "admin"
+
+
+def test_admin_creator_is_notified_of_po_status_changes(client, make_user, db):
+    _username, admin = signed_in(client, make_user, "admin")
+    supplier, location, product = create_fixture_data(db)
+    created = client.post(
+        "/api/purchasing/purchase-orders", json=create_payload(supplier, location, product)
+    ).json()
+    assert client.post(f"/api/purchasing/purchase-orders/{created['id']}/submit").status_code == 200
+    recipients = db.scalars(
+        select(Notification.recipient_user_id).where(Notification.reference_id == created["id"])
+    ).all()
+    assert admin.id in recipients
+
+
+def test_purchase_order_rejects_deleted_products(client, make_user, db):
+    signed_in(client, make_user, "manager")
+    supplier, location, product = create_fixture_data(db)
+    product.is_active = False
+    db.commit()
+    response = client.post(
+        "/api/purchasing/purchase-orders", json=create_payload(supplier, location, product)
+    )
+    assert response.status_code == 404
