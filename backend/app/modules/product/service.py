@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Protocol
 
 from sqlalchemy import select
@@ -30,6 +31,19 @@ class ProductStockItem:
     variant_sku: str | None
     variant_attributes: dict[str, Any] | None
     is_active: bool = True
+
+
+@dataclass(frozen=True)
+class SaleProduct:
+    product_id: int
+    product_name: str
+    product_active: bool
+    has_active_variants: bool
+    variant_id: int | None
+    variant_sku: str | None
+    variant_attributes: dict[str, Any] | None
+    variant_active: bool
+    unit_price: Decimal
 
 
 def product_stock_items(
@@ -112,6 +126,65 @@ def product_stock_item(
     return next(
         (item for item in product_stock_items(db, [product_id]) if item.variant_id == variant_id),
         None,
+    )
+
+
+def sale_product(db: Session, product_id: int, variant_id: int | None) -> SaleProduct | None:
+    """Return the active-sale snapshot and live effective price for one catalog item."""
+    product = db.scalar(select(Product).where(Product.id == product_id))
+    if product is None:
+        return None
+    variants = list(
+        db.scalars(
+            select(ProductVariant).where(
+                ProductVariant.product_id == product_id,
+                ProductVariant.is_active,
+            )
+        )
+    )
+    has_active_variants = bool(variants)
+    if variant_id is None:
+        if has_active_variants:
+            return SaleProduct(
+                product_id,
+                product.name,
+                product.is_active,
+                True,
+                None,
+                None,
+                None,
+                False,
+                product.price,
+            )
+        return SaleProduct(
+            product_id,
+            product.name,
+            product.is_active,
+            False,
+            None,
+            None,
+            None,
+            False,
+            product.price,
+        )
+    variant = db.scalar(
+        select(ProductVariant).where(
+            ProductVariant.id == variant_id,
+            ProductVariant.product_id == product_id,
+        )
+    )
+    if variant is None:
+        return None
+    return SaleProduct(
+        product_id,
+        product.name,
+        product.is_active,
+        has_active_variants,
+        variant.id,
+        variant.sku,
+        variant.attributes,
+        variant.is_active,
+        variant.price if variant.price is not None else product.price,
     )
 
 

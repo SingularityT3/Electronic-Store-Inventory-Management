@@ -7,15 +7,19 @@ Public surface of the `product` module. Other modules may import from here only;
 from app.modules.product.service import (
     ProductService,
     ProductStockItem,
+    SaleProduct,
     StockCheck,
     product_stock_item,
     product_stock_items,
+    sale_product,
 )
 
 __all__ = [
     "ProductService",
     "ProductStockItem",
+    "SaleProduct",
     "StockCheck",
     "product_stock_item",
     "product_stock_items",
+    "sale_product",
 ]
