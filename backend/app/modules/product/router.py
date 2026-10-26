@@ -1,5 +1,6 @@
 """HTTP routes for the product catalog and its images."""
 
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
@@ -30,11 +31,17 @@ router = APIRouter(prefix="/product", tags=["product"])
 DbSession = Annotated[Session, Depends(get_session)]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 _stock_checker: StockCheck | None = None
+_tracking_history_checker: Callable[[Session, int], bool] | None = None
 
 
 def set_stock_checker(checker: StockCheck) -> None:
     global _stock_checker
     _stock_checker = checker
+
+
+def set_tracking_history_checker(checker: Callable[[Session, int], bool]) -> None:
+    global _tracking_history_checker
+    _tracking_history_checker = checker
 
 
 class ProductInput(BaseModel):
@@ -44,9 +51,11 @@ class ProductInput(BaseModel):
     brand: str = Field(max_length=100)
     price: Decimal = Field(ge=0, max_digits=12, decimal_places=2, allow_inf_nan=False)
     description: str | None = None
+    tracking_mode: Literal["untracked", "batch", "serial"] = "untracked"
 
 
 class ProductOut(ProductInput):
+    tracking_mode: Literal["untracked", "batch", "serial"]
     id: int
     is_active: bool
     category_name: str
@@ -174,6 +183,7 @@ def _product_out(
         brand=product.brand,
         price=product.price,
         description=product.description,
+        tracking_mode=product.tracking_mode,
         is_active=product.is_active,
         variant_count=variant_count,
         stock=stock,
@@ -1046,7 +1056,7 @@ def list_products(
                 WITH RECURSIVE {", ".join(ctes)}
                 SELECT p.id, p.name, p.sku, p.category_id, c.name AS category_name,
                        tree.id_path, tree.name_path, p.brand, p.price,
-                       p.description, p.is_active,
+                       p.description, p.tracking_mode, p.is_active,
                        (
                          SELECT count(*) FROM product_variants v
                          WHERE v.product_id = p.id AND v.is_active
@@ -1108,6 +1118,7 @@ def list_products(
             brand=row["brand"],
             price=row["price"],
             description=row["description"],
+            tracking_mode=row["tracking_mode"],
             is_active=row["is_active"],
             variant_count=row["variant_count"],
             stock=stock[row["id"]],
@@ -1131,6 +1142,7 @@ def create_product(
         brand=body.brand.strip(),
         price=body.price,
         description=body.description.strip() if body.description else None,
+        tracking_mode=body.tracking_mode,
     )
     db.add(product)
     try:
@@ -1148,7 +1160,12 @@ def create_product(
         username=user.username,
         entity_type="product",
         entity_id=str(product.id),
-        after={"name": name, "sku": sku, "price": str(body.price)},
+        after={
+            "name": name,
+            "sku": sku,
+            "price": str(body.price),
+            "tracking_mode": product.tracking_mode,
+        },
     )
     db.commit()
     path = _category_path_map(db).get(product.category_id, [])
@@ -1173,7 +1190,11 @@ def update_product(
     db: DbSession,
     user: Annotated[CurrentUser, Depends(require(Permission.PRODUCTS_MANAGE))],
 ) -> ProductOut:
-    product = _active_product(product_id, db)
+    product = db.scalar(
+        select(Product).where(Product.id == product_id, Product.is_active).with_for_update()
+    )
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
     name, sku = _validate(body, db, product.id)
     before = {
         "name": product.name,
@@ -1182,13 +1203,28 @@ def update_product(
         "brand": product.brand,
         "price": product.price,
         "description": product.description,
+        "tracking_mode": product.tracking_mode,
     }
+    tracking_mode = (
+        body.tracking_mode if "tracking_mode" in body.model_fields_set else product.tracking_mode
+    )
+    if tracking_mode != product.tracking_mode:
+        if _tracking_history_checker is None:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR, "Stock tracking service unavailable"
+            )
+        if _tracking_history_checker(db, product.id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Cannot change tracking mode after inventory has been recorded.",
+            )
     product.name, product.sku, product.category_id = name, sku, body.category_id
     product.brand, product.price, product.description = (
         body.brand.strip(),
         body.price,
         body.description.strip() if body.description else None,
     )
+    product.tracking_mode = tracking_mode
     try:
         db.flush()
     except IntegrityError as error:
@@ -1203,6 +1239,7 @@ def update_product(
         "brand": product.brand,
         "price": product.price,
         "description": product.description,
+        "tracking_mode": product.tracking_mode,
     }
     old, new = changes(before, after)
     if old:

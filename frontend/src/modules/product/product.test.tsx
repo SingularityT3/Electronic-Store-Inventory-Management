@@ -25,6 +25,7 @@ function renderProduct(path: string, role: Role) {
     'fetch',
     vi.fn((url: string) => {
       if (url === '/api/auth/me') return reply(user);
+      if (url === '/api/product/categories') return reply([]);
       if (url.startsWith('/api/product?page=')) {
         return reply({
           items: [
@@ -138,6 +139,15 @@ test('product list renders catalog rows', async () => {
 test('cashier cannot open product management but can see search placeholder', async () => {
   renderProduct('/products/new', 'cashier');
   expect(await screen.findByText(/do not have permission/i)).toBeInTheDocument();
+});
+
+test('product form offers optional inventory tracking modes', async () => {
+  renderProduct('/products/new', 'manager');
+  const tracking = await screen.findByLabelText('Inventory tracking');
+  expect(tracking).toHaveValue('untracked');
+  fireEvent.change(tracking, { target: { value: 'serial' } });
+  expect(tracking).toHaveValue('serial');
+  expect(within(tracking).getByRole('option', { name: 'Batch tracked' })).toBeInTheDocument();
 });
 
 test('category tree shows hierarchy and staff is denied category management', async () => {

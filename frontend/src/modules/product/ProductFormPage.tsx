@@ -11,6 +11,7 @@ interface FormValues {
   brand: string;
   price: string;
   description: string;
+  tracking_mode: 'untracked' | 'batch' | 'serial';
 }
 
 const EMPTY: FormValues = {
@@ -20,6 +21,7 @@ const EMPTY: FormValues = {
   brand: '',
   price: '',
   description: '',
+  tracking_mode: 'untracked',
 };
 const MAX_IMAGE_BYTES = Number(import.meta.env.VITE_PRODUCT_IMAGE_MAX_BYTES ?? 5 * 1024 * 1024);
 
@@ -64,6 +66,7 @@ export default function ProductFormPage() {
             brand: product.brand,
             price: product.price,
             description: product.description ?? '',
+            tracking_mode: product.tracking_mode ?? 'untracked',
           }),
         )
         .catch(() => setError('Could not load product.'));
@@ -205,6 +208,24 @@ export default function ProductFormPage() {
               value={values.description}
               onChange={(e) => update('description', e.target.value)}
             />
+          )}
+        </FormField>
+        <FormField label="Inventory tracking" error={errors.tracking_mode}>
+          {(props) => (
+            <select
+              {...props}
+              value={values.tracking_mode}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'untracked' || value === 'batch' || value === 'serial') {
+                  setValues({ ...values, tracking_mode: value });
+                }
+              }}
+            >
+              <option value="untracked">Untracked</option>
+              <option value="batch">Batch tracked</option>
+              <option value="serial">Serial tracked</option>
+            </select>
           )}
         </FormField>
         <button type="submit">{editing ? 'Save changes' : 'Add product'}</button>

@@ -89,6 +89,7 @@ class Product(Base):
     brand: Mapped[str] = mapped_column(String(100))
     price: Mapped[Decimal] = mapped_column(Money)
     description: Mapped[str | None] = mapped_column(Text)
+    tracking_mode: Mapped[str] = mapped_column(String(20), server_default=text("'untracked'"))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -98,6 +99,10 @@ class Product(Base):
     __table_args__ = (
         CheckConstraint("price >= 0", name="price_non_negative"),
         CheckConstraint("btrim(sku) <> ''", name="sku_not_blank"),
+        CheckConstraint(
+            "tracking_mode IN ('untracked', 'batch', 'serial')",
+            name="tracking_mode",
+        ),
         Index("ix_products_category_id", "category_id"),
         Index("ix_products_brand", "brand"),
         Index("ix_products_price", "price"),

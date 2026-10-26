@@ -96,6 +96,21 @@ class SaleLineSerial(Base):
     )
 
 
+class SaleLineBatch(Base):
+    """Quantity allocated from a batch to a sale line for recall and return traceability."""
+
+    __tablename__ = "sale_line_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sale_line_id: Mapped[int] = mapped_column(
+        ForeignKey("sale_lines.id", ondelete="RESTRICT"), index=True
+    )
+    batch_stock_id: Mapped[int] = mapped_column(ForeignKey("batch_stock.id", ondelete="RESTRICT"))
+    quantity: Mapped[int]
+
+    __table_args__ = (CheckConstraint("quantity > 0", name="quantity_positive"),)
+
+
 class Payment(Base):
     """How a sale was paid. Card numbers are never stored."""
 
@@ -154,6 +169,36 @@ class ReturnLine(Base):
         CheckConstraint("condition IN ('resaleable', 'damaged')", name="condition"),
         CheckConstraint("condition = 'resaleable' OR NOT restocked", name="damaged_not_restocked"),
     )
+
+
+class ReturnLineSerial(Base):
+    """A serial restored by a return; the original sale-line link remains immutable."""
+
+    __tablename__ = "return_line_serials"
+
+    return_line_id: Mapped[int] = mapped_column(
+        ForeignKey("return_lines.id", ondelete="RESTRICT"), primary_key=True
+    )
+    serial_number_id: Mapped[int] = mapped_column(
+        ForeignKey("serial_numbers.id", ondelete="RESTRICT"), primary_key=True
+    )
+
+
+class ReturnLineBatch(Base):
+    """Quantity returned from a specific original sale allocation."""
+
+    __tablename__ = "return_line_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    return_line_id: Mapped[int] = mapped_column(
+        ForeignKey("return_lines.id", ondelete="RESTRICT"), index=True
+    )
+    sale_line_batch_id: Mapped[int] = mapped_column(
+        ForeignKey("sale_line_batches.id", ondelete="RESTRICT")
+    )
+    quantity: Mapped[int]
+
+    __table_args__ = (CheckConstraint("quantity > 0", name="quantity_positive"),)
 
 
 class Invoice(Base):

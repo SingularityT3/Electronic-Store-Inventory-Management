@@ -13,12 +13,12 @@ from app.modules.auth.router import router as auth_router
 from app.modules.auth.router import set_location_validator
 from app.modules.notifications.router import router as notifications_router
 from app.modules.product.router import router as product_router
-from app.modules.product.router import set_stock_checker
+from app.modules.product.router import set_stock_checker, set_tracking_history_checker
 from app.modules.purchasing.router import router as purchasing_router
 from app.modules.reporting.router import router as reporting_router
 from app.modules.sales.router import router as sales_router
 from app.modules.stock.router import router as stock_router
-from app.modules.stock.service import location_exists, stock_quantities
+from app.modules.stock.service import has_tracking_history, location_exists, stock_quantities
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("esims.request")
@@ -75,6 +75,7 @@ async def log_requests(
 def create_app() -> FastAPI:
     app = FastAPI(title="ESIMS")
     set_stock_checker(stock_quantities)
+    set_tracking_history_checker(has_tracking_history)
     set_location_validator(location_exists)
     app.middleware("http")(no_store)
     app.middleware("http")(log_requests)

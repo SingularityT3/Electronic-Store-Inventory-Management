@@ -124,6 +124,50 @@ class Batch(Base):
     )
 
 
+class BatchStock(Base):
+    """Aggregate on-hand quantity for one batch at one location (not a per-unit table)."""
+
+    __tablename__ = "batch_stock"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id", ondelete="RESTRICT"))
+    location_id: Mapped[int] = mapped_column(ForeignKey("locations.id", ondelete="RESTRICT"))
+    quantity_received: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    quantity_on_hand: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+
+    __table_args__ = (
+        UniqueConstraint("batch_id", "location_id"),
+        CheckConstraint("quantity_received >= 0", name="quantity_received_non_negative"),
+        CheckConstraint("quantity_on_hand >= 0", name="quantity_on_hand_non_negative"),
+        Index("ix_batch_stock_location_id", "location_id"),
+    )
+
+
+class BatchReceipt(Base):
+    """Receipt event linking a batch and location to its owning-module reference."""
+
+    __tablename__ = "batch_receipts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("batches.id", ondelete="RESTRICT"))
+    location_id: Mapped[int] = mapped_column(ForeignKey("locations.id", ondelete="RESTRICT"))
+    reference_type: Mapped[str] = mapped_column(String(50))
+    reference_id: Mapped[int]
+    quantity: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "batch_id",
+            "location_id",
+            "reference_type",
+            "reference_id",
+        ),
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        Index("ix_batch_receipts_batch_id", "batch_id"),
+    )
+
+
 class SerialNumber(Base):
     """One serialised unit (FR-2.5). Receipt and sale links live in purchasing and sales."""
 
@@ -144,7 +188,9 @@ class SerialNumber(Base):
     )
 
     __table_args__ = (
-        CheckConstraint("status IN ('in_stock', 'sold', 'returned', 'damaged')", name="status"),
+        CheckConstraint(
+            "status IN ('in_stock', 'sold', 'returned', 'damaged', 'removed')", name="status"
+        ),
         CheckConstraint("btrim(serial_number) <> ''", name="serial_number_not_blank"),
         Index("ix_serial_numbers_product_id", "product_id"),
     )

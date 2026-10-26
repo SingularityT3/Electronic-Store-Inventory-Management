@@ -11,6 +11,7 @@ export interface Product {
   brand: string;
   price: string;
   description: string | null;
+  tracking_mode: 'untracked' | 'batch' | 'serial';
   is_active: boolean;
   variant_count: number;
   stock: number;
