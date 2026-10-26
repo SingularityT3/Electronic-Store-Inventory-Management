@@ -31,6 +31,7 @@ class ProductStockItem:
     variant_sku: str | None
     variant_attributes: dict[str, Any] | None
     is_active: bool = True
+    tracking_mode: str = "untracked"
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class SaleProduct:
     variant_attributes: dict[str, Any] | None
     variant_active: bool
     unit_price: Decimal
+    tracking_mode: str = "untracked"
 
 
 def product_stock_items(
@@ -61,6 +63,7 @@ def product_stock_items(
             Product.category_id,
             Category.name,
             Product.is_active,
+            Product.tracking_mode,
         )
         .join(Category, Category.id == Product.category_id)
         .order_by(Product.name, Product.sku)
@@ -84,9 +87,15 @@ def product_stock_items(
         )
 
     items = []
-    for product_id, name, sku, category_id, category_name, product_active in db.execute(
-        product_query
-    ):
+    for (
+        product_id,
+        name,
+        sku,
+        category_id,
+        category_name,
+        product_active,
+        tracking_mode,
+    ) in db.execute(product_query):
         product_variants = variants_by_product.get(product_id, [])
         has_active_variants = any(active for *_, active in product_variants)
         items.append(
@@ -100,6 +109,7 @@ def product_stock_items(
                 None,
                 None,
                 product_active and not has_active_variants,
+                tracking_mode,
             )
         )
         items.extend(
@@ -113,6 +123,7 @@ def product_stock_items(
                 variant_sku,
                 attributes,
                 product_active and variant_active,
+                tracking_mode,
             )
             for variant_id, variant_sku, attributes, variant_active in product_variants
         )
@@ -127,6 +138,11 @@ def product_stock_item(
         (item for item in product_stock_items(db, [product_id]) if item.variant_id == variant_id),
         None,
     )
+
+
+def lock_product_for_stock(db: Session, product_id: int) -> None:
+    """Share-lock tracking configuration until the stock transaction completes."""
+    db.scalar(select(Product.id).where(Product.id == product_id).with_for_update(read=True))
 
 
 def sale_product(db: Session, product_id: int, variant_id: int | None) -> SaleProduct | None:
@@ -155,6 +171,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
                 None,
                 False,
                 product.price,
+                product.tracking_mode,
             )
         return SaleProduct(
             product_id,
@@ -166,6 +183,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
             None,
             False,
             product.price,
+            product.tracking_mode,
         )
     variant = db.scalar(
         select(ProductVariant).where(
@@ -185,6 +203,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
         variant.attributes,
         variant.is_active,
         variant.price if variant.price is not None else product.price,
+        product.tracking_mode,
     )
 
 

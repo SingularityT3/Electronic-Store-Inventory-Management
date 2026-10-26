@@ -6,13 +6,21 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
-from app.modules.sales._internal.models import Invoice, Payment, Sale, SaleLine
+from app.modules.sales._internal.models import (
+    Invoice,
+    Payment,
+    ReturnLineBatch,
+    Sale,
+    SaleLine,
+    SaleLineBatch,
+    SaleLineSerial,
+)
 from app.modules.sales.service import (
     PaymentInput,
     SaleInputError,
@@ -20,7 +28,12 @@ from app.modules.sales.service import (
     SaleStockError,
     record_sale,
 )
-from app.modules.stock import location_exists, stock_positions
+from app.modules.stock import (
+    batch_stock_positions,
+    location_exists,
+    serial_number_labels,
+    stock_positions,
+)
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
@@ -43,6 +56,7 @@ class SaleLineIn(BaseModel):
     quantity: int = Field(ge=1, le=100_000)
     discount: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
     discount_type: Literal["percentage", "amount"] = "amount"
+    serial_numbers: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list)
 
 
 class PaymentIn(BaseModel):
@@ -68,6 +82,7 @@ class SaleLineOut(BaseModel):
     discount_amount: Decimal
     tax_amount: Decimal
     line_total: Decimal
+    serial_numbers: list[str] = Field(default_factory=list)
 
 
 class PaymentOut(BaseModel):
@@ -98,6 +113,55 @@ class SaleOut(BaseModel):
     invoice: InvoiceOut
 
 
+class BatchLocationOut(BaseModel):
+    location_id: int
+    quantity_in_stock: int
+
+
+class BatchReceiptOut(BaseModel):
+    location_id: int
+    reference_type: str
+    reference_id: int
+    quantity: int
+
+
+class BatchSoldOut(BaseModel):
+    invoice_number: int
+    quantity_sold: int
+    quantity_returned: int
+    quantity_still_sold: int
+
+
+class BatchRecallOut(BaseModel):
+    batch_id: int
+    batch_number: str
+    product_id: int
+    variant_id: int | None
+    quantity_received: int
+    quantity_in_stock: int
+    locations: list[BatchLocationOut]
+    receipts: list[BatchReceiptOut]
+    sold: list[BatchSoldOut]
+
+
+def _sale_line_out(db: Session, line: SaleLine) -> SaleLineOut:
+    serial_ids = db.scalars(
+        select(SaleLineSerial.serial_number_id).where(SaleLineSerial.sale_line_id == line.id)
+    ).all()
+    labels = serial_number_labels(db, serial_ids)
+    return SaleLineOut(
+        id=line.id,
+        product_id=line.product_id,
+        variant_id=line.variant_id,
+        quantity=line.quantity,
+        unit_price=line.unit_price,
+        discount_amount=line.discount_amount,
+        tax_amount=line.tax_amount,
+        line_total=line.line_total,
+        serial_numbers=[labels[serial_id] for serial_id in serial_ids if serial_id in labels],
+    )
+
+
 def _sale_out(db: Session, sale: Sale) -> SaleOut:
     invoice = db.scalar(select(Invoice).where(Invoice.sale_id == sale.id))
     if invoice is None:
@@ -113,7 +177,7 @@ def _sale_out(db: Session, sale: Sale) -> SaleOut:
         total=sale.total,
         customer_name=sale.customer_name,
         lines=[
-            SaleLineOut.model_validate(line, from_attributes=True)
+            _sale_line_out(db, line)
             for line in db.scalars(
                 select(SaleLine).where(SaleLine.sale_id == sale.id).order_by(SaleLine.id)
             )
@@ -200,6 +264,7 @@ def create_sale(
                     item.quantity,
                     item.discount,
                     item.discount_type,
+                    tuple(item.serial_numbers),
                 )
                 for item in body.lines
             ],
@@ -221,6 +286,78 @@ def create_sale(
     except Exception:
         db.rollback()
         raise
+
+
+@router.get("/batches/{batch_id}/recall", response_model=BatchRecallOut)
+def batch_recall(
+    batch_id: int,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> BatchRecallOut:
+    if not user.sees_all_locations:
+        if user.location_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "A location assignment is required.")
+        if location_id is not None:
+            authorize_location(db, user, location_id, "View batch recall")
+        location_id = user.location_id
+    if location_id is not None and not location_exists(db, location_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
+    batch_data = batch_stock_positions(db, batch_id=batch_id, location_id=location_id)
+    if batch_data is None or (location_id is not None and not batch_data.locations):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found.")
+
+    stock_ids = [position.batch_stock_id for position in batch_data.locations]
+    sold_rows = []
+    if stock_ids:
+        allocations = db.execute(
+            select(SaleLineBatch, Invoice.invoice_number)
+            .join(SaleLine, SaleLine.id == SaleLineBatch.sale_line_id)
+            .join(Invoice, Invoice.sale_id == SaleLine.sale_id)
+            .where(SaleLineBatch.batch_stock_id.in_(stock_ids))
+            .order_by(Invoice.invoice_number, SaleLineBatch.id)
+        ).all()
+        for allocation, invoice_number in allocations:
+            returned = db.scalar(
+                select(func.coalesce(func.sum(ReturnLineBatch.quantity), 0)).where(
+                    ReturnLineBatch.sale_line_batch_id == allocation.id
+                )
+            )
+            quantity_returned = int(returned or 0)
+            sold_rows.append(
+                BatchSoldOut(
+                    invoice_number=invoice_number,
+                    quantity_sold=allocation.quantity,
+                    quantity_returned=quantity_returned,
+                    quantity_still_sold=allocation.quantity - quantity_returned,
+                )
+            )
+    locations = [
+        BatchLocationOut(
+            location_id=position.location_id,
+            quantity_in_stock=position.quantity_on_hand,
+        )
+        for position in batch_data.locations
+    ]
+    return BatchRecallOut(
+        batch_id=batch_data.batch_id,
+        batch_number=batch_data.batch_number,
+        product_id=batch_data.product_id,
+        variant_id=batch_data.variant_id,
+        quantity_received=batch_data.quantity_received,
+        quantity_in_stock=sum(item.quantity_in_stock for item in locations),
+        locations=locations,
+        receipts=[
+            BatchReceiptOut(
+                location_id=receipt.location_id,
+                reference_type=receipt.reference_type,
+                reference_id=receipt.reference_id,
+                quantity=receipt.quantity,
+            )
+            for receipt in batch_data.receipts
+        ],
+        sold=sold_rows,
+    )
 
 
 @router.get("/{sale_id}", response_model=SaleOut)

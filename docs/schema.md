@@ -31,9 +31,9 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | `auth`          | `roles`, `users`, `user_sessions`, `password_reset_tokens`                                                             |
 | `notifications` | `notifications`, `stock_alerts`                                                                                         |
 | `product`       | `categories`, `category_attributes`, `products`, `product_variants`, `product_images`                                  |
-| `stock`         | `locations`, `stock_levels`, `item_costs`, `batches`, `serial_numbers`, `stock_movements`, `stock_transfers`           |
+| `stock`         | `locations`, `stock_levels`, `item_costs`, `batches`, `batch_stock`, `batch_receipts`, `serial_numbers`, `stock_movements`, `stock_transfers` |
 | `purchasing`    | `suppliers`, `supplier_products`, `purchase_orders`, `purchase_order_lines`, `po_receipts`, `po_receipt_lines`, `po_receipt_serials`, `supplier_price_history` |
-| `sales`         | `sales`, `sale_lines`, `sale_line_serials`, `payments`, `returns`, `return_lines`, `invoices`                          |
+| `sales`         | `sales`, `sale_lines`, `sale_line_serials`, `sale_line_batches`, `payments`, `returns`, `return_lines`, `return_line_serials`, `return_line_batches`, `invoices` |
 | `reporting`     | none (it reads through other modules' services)                                                                        |
 
 ## Rules enforced by the database
@@ -48,6 +48,9 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | One current stock alert per item per location (#19) | `UNIQUE NULLS NOT DISTINCT (product_id, variant_id, location_id)` on `stock_alerts`; a NULL alert type means resolved. |
 | Adjustment needs a reason (FR-2.4)                  | `CHECK` on `stock_movements`: an `adjustment` needs a `reason_code` and a non-blank `reason` |
 | Unique serial number (FR-2.5)                       | `UNIQUE` on `serial_numbers.serial_number`. A unit appears on one receipt line.           |
+| Product tracking mode (FR-2.5)                       | `products.tracking_mode` is `untracked`, `batch`, or `serial`, defaulting to `untracked`. |
+| Batch recall (FR-2.5)                                | `batch_stock` stores aggregate available and received quantity per location; `batch_receipts`, `sale_line_batches`, and `return_line_batches` preserve receipt, sale, and return traceability without per-unit batch rows. |
+| Serial sale/return traceability (FR-2.5)              | `sale_line_serials` and `return_line_serials` retain original sale and return links while `serial_numbers.status` and `location_id` describe current availability. |
 | No over-receipt (A-7, FR-3.3)                       | `CHECK (quantity_received <= quantity_ordered)` on `purchase_order_lines`                 |
 | Unique, sequential invoice number (FR-4.3)          | `invoices.invoice_number` defaults to `nextval('invoice_number_seq')` and is `UNIQUE`. One invoice per sale (`UNIQUE sale_id`). |
 | Damaged returns are not restocked (FR-4.2)          | `CHECK` on `return_lines`                                                                 |
@@ -99,6 +102,10 @@ erDiagram
     product_variants |o--o{ stock_levels : ""
     products ||--o| item_costs : ""
     products ||--o{ batches : ""
+    batches ||--o{ batch_stock : ""
+    locations ||--o{ batch_stock : ""
+    batches ||--o{ batch_receipts : ""
+    locations ||--o{ batch_receipts : ""
     batches |o--o{ serial_numbers : ""
     locations |o--o{ serial_numbers : ""
     locations ||--o{ stock_movements : ""
@@ -125,10 +132,16 @@ erDiagram
     products ||--o{ sale_lines : ""
     sale_lines ||--o{ sale_line_serials : ""
     serial_numbers ||--o{ sale_line_serials : ""
+    sale_lines ||--o{ sale_line_batches : ""
+    batch_stock ||--o{ sale_line_batches : ""
     sales ||--o{ payments : ""
     sales ||--o{ returns : ""
     users |o--o{ returns : "approved by"
     returns ||--|{ return_lines : ""
+    return_lines ||--o{ return_line_serials : ""
+    serial_numbers ||--o{ return_line_serials : ""
+    return_lines ||--o{ return_line_batches : ""
+    sale_line_batches ||--o{ return_line_batches : ""
     sale_lines ||--o{ return_lines : ""
     sales ||--o| invoices : ""
 
@@ -156,6 +169,7 @@ erDiagram
         int category_id FK
         text brand
         numeric price
+        text tracking_mode
         bool is_active
     }
     product_variants {
@@ -173,6 +187,27 @@ erDiagram
         int quantity "CHECK >= 0"
         int reorder_threshold
         int reorder_to_level
+    }
+    batches {
+        int id PK
+        int product_id FK
+        int variant_id FK
+        text batch_number
+    }
+    batch_stock {
+        int id PK
+        int batch_id FK
+        int location_id FK
+        int quantity_received
+        int quantity_on_hand "CHECK >= 0"
+    }
+    batch_receipts {
+        int id PK
+        int batch_id FK
+        int location_id FK
+        text reference_type
+        int reference_id
+        int quantity "CHECK > 0"
     }
     stock_movements {
         bigint id PK
