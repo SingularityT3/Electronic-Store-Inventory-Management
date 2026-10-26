@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../App';
 import { AuthProvider, type Permission, type Role, type User } from '../auth';
@@ -145,4 +145,66 @@ test('category tree shows hierarchy and staff is denied category management', as
   expect(await screen.findByText(/Smartphones \(1 \(1\)\)/)).toBeInTheDocument();
   renderCategories('staff');
   expect(await screen.findByText(/do not have permission/i)).toBeInTheDocument();
+});
+
+test('product filters and sort are sent with the search term', async () => {
+  const user: User = {
+    id: 1,
+    username: 'manager',
+    full_name: 'manager',
+    role: 'manager',
+    location_id: null,
+    permissions: permissions.manager,
+  };
+  const reply = (body: unknown, status = 200) =>
+    Promise.resolve({ ok: status < 400, status, json: async () => body });
+  const fetchMock = vi.fn((url: string) => {
+    if (url === '/api/auth/me') return reply(user);
+    if (url === '/api/product/categories') {
+      return reply([
+        {
+          id: 2,
+          name: 'Mobile Phones',
+          parent_id: null,
+          depth: 0,
+          path: [{ id: 2, name: 'Mobile Phones' }],
+          path_label: 'Mobile Phones',
+          product_count: 1,
+          total_product_count: 1,
+        },
+      ]);
+    }
+    if (url.startsWith('/api/product?')) {
+      return reply({ items: [], total: 0, page: 1, page_size: 50 });
+    }
+    return reply({ detail: 'Not found' }, 404);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(
+    <MemoryRouter initialEntries={['/products/search']}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+  const filters = await screen.findByRole('form', { name: 'Filter products' });
+  await screen.findByRole('option', { name: 'Mobile Phones' });
+  fireEvent.change(within(filters).getByLabelText('Category'), { target: { value: '2' } });
+  fireEvent.change(within(filters).getByLabelText('Max price'), { target: { value: '20000' } });
+  fireEvent.change(within(filters).getByLabelText('Stock'), { target: { value: 'low_stock' } });
+  fireEvent.change(within(filters).getByLabelText('Sort by'), {
+    target: { value: 'price-desc' },
+  });
+  fireEvent.click(within(filters).getByRole('button', { name: 'Apply filters' }));
+
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/product?page=1&page_size=50&category_id=2&max_price=20000&stock_status=low_stock&sort=price&order=desc',
+      expect.anything(),
+    ),
+  );
+
+  fireEvent.change(within(filters).getByLabelText('Min price'), { target: { value: '30000' } });
+  fireEvent.click(within(filters).getByRole('button', { name: 'Apply filters' }));
+  expect(await screen.findByText('Minimum price cannot be above the maximum price.')).toBeVisible();
 });

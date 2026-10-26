@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -16,7 +16,7 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service, changes
 from app.modules.auth import CurrentUser, Permission, require
-from app.modules.notifications import resolve_stock_alerts
+from app.modules.notifications import active_stock_alerts, resolve_stock_alerts
 from app.modules.product._internal.models import (
     Category,
     CategoryAttribute,
@@ -922,6 +922,17 @@ def delete_variant(
     db.commit()
 
 
+StockStatus = Literal["in_stock", "low_stock", "out_of_stock"]
+SortField = Literal["relevance", "name", "price", "stock"]
+
+
+def _stock_status(quantity: int, has_alert: bool) -> StockStatus:
+    """Out of stock at zero; low when at or below a reorder threshold in scope (FR-2.3)."""
+    if quantity <= 0:
+        return "out_of_stock"
+    return "low_stock" if has_alert else "in_stock"
+
+
 @router.get("", response_model=ProductPage)
 def list_products(
     db: DbSession,
@@ -929,147 +940,181 @@ def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     q: str | None = Query(None, max_length=SEARCH_TERM_MAX_LENGTH),
+    category_id: int | None = Query(None, ge=1, description="Includes its subcategories"),
+    min_price: Annotated[Decimal | None, Query(ge=0, max_digits=12, decimal_places=2)] = None,
+    max_price: Annotated[Decimal | None, Query(ge=0, max_digits=12, decimal_places=2)] = None,
+    stock_status: StockStatus | None = None,
+    sort: Annotated[
+        SortField | None, Query(description="Default: relevance when searching, otherwise name")
+    ] = None,
+    order: Literal["asc", "desc"] = "asc",
 ) -> ProductPage:
+    """Active products, searched, filtered and sorted on live price and stock (FR-7.1, FR-7.2).
+
+    Stock, its filter and its sort are scoped like the stock column: Staff and Cashier see
+    their own location, Admin and Manager the total across locations.
+    """
     term = q.strip() if q is not None else ""
     if q is not None and len(q) > SEARCH_TERM_MAX_LENGTH:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Search term is too long")
+    if min_price is not None and max_price is not None and min_price > max_price:
+        _error("min_price", "Minimum price cannot be above the maximum price")
+    sort = sort or ("relevance" if term else "name")
+    if sort == "relevance" and not term:
+        sort = "name"
 
-    variant_count = (
-        select(func.count(ProductVariant.id))
-        .where(ProductVariant.product_id == Product.id, ProductVariant.is_active)
-        .correlate(Product)
-        .scalar_subquery()
-        .label("variant_count")
-    )
+    ctes = [
+        """
+        tree AS (
+            SELECT c.id, ARRAY[c.id] AS id_path, ARRAY[c.name::text] AS name_path
+            FROM categories c WHERE c.parent_id IS NULL
+            UNION ALL
+            SELECT c.id, tree.id_path || c.id, tree.name_path || c.name
+            FROM categories c JOIN tree ON tree.id = c.parent_id
+        )
+        """
+    ]
+    conditions = ["p.is_active"]
+    params: dict[str, object] = {}
+    rank = "0"
     if term:
         escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped}%"
-        prefix = f"{escaped}%"
-        rows = list(
-            db.execute(
-                text(
-                    """
-                    WITH RECURSIVE matched_categories AS (
-                        SELECT id FROM categories
-                        WHERE name ILIKE :pattern ESCAPE '\\'
-                    ),
-                    descendants AS (
-                        SELECT id FROM matched_categories
-                        UNION ALL
-                        SELECT c.id FROM categories c
-                        JOIN descendants d ON c.parent_id = d.id
-                    ),
-                    tree AS (
-                        SELECT c.id, ARRAY[c.id] AS id_path,
-                               ARRAY[c.name::text] AS name_path
-                        FROM categories c WHERE c.parent_id IS NULL
-                        UNION ALL
-                        SELECT c.id, tree.id_path || c.id,
-                               tree.name_path || c.name
-                        FROM categories c JOIN tree ON tree.id = c.parent_id
-                    )
-                    SELECT p.id, p.name, p.sku, p.category_id, c.name AS category_name,
-                           tree.id_path, tree.name_path, p.brand, p.price,
-                           p.description, p.is_active,
-                           (
-                             SELECT count(*) FROM product_variants v
-                             WHERE v.product_id = p.id AND v.is_active
-                           )::int AS variant_count,
-                           count(*) OVER() AS total,
-                           CASE
-                             WHEN lower(p.sku) = lower(:term) THEN 0
-                             WHEN lower(p.name) = lower(:term) THEN 1
-                             WHEN p.sku ILIKE :prefix ESCAPE '\' OR
-                                  p.name ILIKE :prefix ESCAPE '\' THEN 2
-                             ELSE 3
-                           END AS rank
-                    FROM products p
-                    JOIN categories c ON c.id = p.category_id
-                    JOIN tree ON tree.id = p.category_id
-                    WHERE p.is_active AND (
-                        p.name ILIKE :pattern ESCAPE '\' OR
-                        p.sku ILIKE :pattern ESCAPE '\' OR
-                        p.brand ILIKE :pattern ESCAPE '\' OR
-                        EXISTS (
-                            SELECT 1 FROM product_variants v
-                            WHERE v.product_id = p.id AND v.is_active
-                              AND v.sku ILIKE :pattern ESCAPE '\'
-                        ) OR
-                        p.category_id IN (SELECT id FROM descendants)
-                    )
-                    ORDER BY rank, p.name, p.id
-                    OFFSET :offset LIMIT :limit
-                    """
-                ),
-                {
-                    "pattern": pattern,
-                    "prefix": prefix,
-                    "term": term,
-                    "offset": (page - 1) * page_size,
-                    "limit": page_size,
-                },
-            ).mappings()
-        )
-        total = rows[0]["total"] if rows else 0
-        product_ids = [row["id"] for row in rows]
-        stock = (
-            _stock_checker(db, product_ids, user.location_id, user.sees_all_locations)
-            if _stock_checker
-            else {}
-        )
-        items = [
-            ProductOut(
-                id=row["id"],
-                name=row["name"],
-                sku=row["sku"],
-                category_id=row["category_id"],
-                category_name=row["category_name"],
-                category_path=[
-                    {"id": item_id, "name": item_name}
-                    for item_id, item_name in zip(row["id_path"], row["name_path"], strict=True)
-                ],
-                category_path_label=" > ".join(row["name_path"]),
-                brand=row["brand"],
-                price=row["price"],
-                description=row["description"],
-                is_active=row["is_active"],
-                variant_count=row["variant_count"],
-                stock=sum(stock.get(row["id"], {}).values()),
+        params.update(pattern=f"%{escaped}%", prefix=f"{escaped}%", term=term)
+        ctes.append(
+            """
+            matched_categories AS (
+                SELECT id FROM categories WHERE name ILIKE :pattern ESCAPE '\\'
+                UNION ALL
+                SELECT c.id FROM categories c
+                JOIN matched_categories m ON c.parent_id = m.id
             )
-            for row in rows
-        ]
-        return ProductPage(items=items, total=total, page=page, page_size=page_size)
+            """
+        )
+        conditions.append(
+            """(
+                p.name ILIKE :pattern ESCAPE '\\' OR
+                p.sku ILIKE :pattern ESCAPE '\\' OR
+                p.brand ILIKE :pattern ESCAPE '\\' OR
+                EXISTS (
+                    SELECT 1 FROM product_variants v
+                    WHERE v.product_id = p.id AND v.is_active
+                      AND v.sku ILIKE :pattern ESCAPE '\\'
+                ) OR
+                p.category_id IN (SELECT id FROM matched_categories)
+            )"""
+        )
+        rank = """CASE
+            WHEN lower(p.sku) = lower(:term) THEN 0
+            WHEN lower(p.name) = lower(:term) THEN 1
+            WHEN p.sku ILIKE :prefix ESCAPE '\\' OR p.name ILIKE :prefix ESCAPE '\\' THEN 2
+            ELSE 3
+        END"""
+    if category_id is not None:
+        params["category_id"] = category_id
+        ctes.append(
+            """
+            filter_categories AS (
+                SELECT id FROM categories WHERE id = :category_id
+                UNION ALL
+                SELECT c.id FROM categories c JOIN filter_categories f ON c.parent_id = f.id
+            )
+            """
+        )
+        conditions.append("p.category_id IN (SELECT id FROM filter_categories)")
+    if min_price is not None:
+        params["min_price"] = min_price
+        conditions.append("p.price >= :min_price")
+    if max_price is not None:
+        params["max_price"] = max_price
+        conditions.append("p.price <= :max_price")
 
-    query = (
-        select(Product, Category.name, variant_count)
-        .join(Category, Category.id == Product.category_id)
-        .where(Product.is_active)
-        .order_by(Product.name, Product.id)
+    direction = "DESC" if order == "desc" else "ASC"
+    order_by = {
+        "relevance": "rank, p.name, p.id",
+        "name": f"p.name {direction}, p.id",
+        "price": f"p.price {direction}, p.name, p.id",
+        # Stock is sorted below, after it is read; name keeps ties stable.
+        "stock": "p.name, p.id",
+    }[sort]
+    in_python = sort == "stock" or stock_status is not None
+    paging = "" if in_python else "OFFSET :offset LIMIT :limit"
+    params.update(offset=(page - 1) * page_size, limit=page_size)
+    rows = list(
+        db.execute(
+            text(
+                f"""
+                WITH RECURSIVE {", ".join(ctes)}
+                SELECT p.id, p.name, p.sku, p.category_id, c.name AS category_name,
+                       tree.id_path, tree.name_path, p.brand, p.price,
+                       p.description, p.is_active,
+                       (
+                         SELECT count(*) FROM product_variants v
+                         WHERE v.product_id = p.id AND v.is_active
+                       )::int AS variant_count,
+                       count(*) OVER() AS total,
+                       {rank} AS rank
+                FROM products p
+                JOIN categories c ON c.id = p.category_id
+                JOIN tree ON tree.id = p.category_id
+                WHERE {" AND ".join(conditions)}
+                ORDER BY {order_by}
+                {paging}
+                """
+            ),
+            params,
+        ).mappings()
     )
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    rows = db.execute(query.offset((page - 1) * page_size).limit(page_size)).all()
-    paths = _category_path_map(db)
-    product_ids = [product.id for product, _, _ in rows]
-    stock = (
+    total = rows[0]["total"] if rows else 0
+    product_ids = [row["id"] for row in rows]
+    stock_by_product = (
         _stock_checker(db, product_ids, user.location_id, user.sees_all_locations)
-        if _stock_checker
+        if _stock_checker and product_ids
         else {}
     )
-    return ProductPage(
-        items=[
-            _product_out(
-                product,
-                category_name,
-                paths.get(product.category_id, []),
-                variant_count,
-                sum(stock.get(product.id, {}).values()),
-            )
-            for product, category_name, variant_count in rows
-        ],
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    stock = {
+        product_id: sum(stock_by_product.get(product_id, {}).values()) for product_id in product_ids
+    }
+    if in_python:
+        if stock_status is not None:
+            alerted = {
+                alert.product_id
+                for alert in active_stock_alerts(
+                    db, location_id=None if user.sees_all_locations else user.location_id
+                )
+            }
+            rows = [
+                row
+                for row in rows
+                if _stock_status(stock[row["id"]], row["id"] in alerted) == stock_status
+            ]
+        if sort == "stock":
+            # Stable sorts: by stock, then the SQL order (name, id) breaks ties.
+            rows.sort(key=lambda row: stock[row["id"]], reverse=order == "desc")
+        total = len(rows)
+        rows = rows[(page - 1) * page_size : page * page_size]
+
+    items = [
+        ProductOut(
+            id=row["id"],
+            name=row["name"],
+            sku=row["sku"],
+            category_id=row["category_id"],
+            category_name=row["category_name"],
+            category_path=[
+                {"id": item_id, "name": item_name}
+                for item_id, item_name in zip(row["id_path"], row["name_path"], strict=True)
+            ],
+            category_path_label=" > ".join(row["name_path"]),
+            brand=row["brand"],
+            price=row["price"],
+            description=row["description"],
+            is_active=row["is_active"],
+            variant_count=row["variant_count"],
+            stock=stock[row["id"]],
+        )
+        for row in rows
+    ]
+    return ProductPage(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=ProductOut, status_code=status.HTTP_201_CREATED)

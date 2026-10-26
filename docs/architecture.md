@@ -144,8 +144,16 @@ reads do not create audit entries. The frontend `SearchBox` is reusable by futur
 purchasing and sales screens; the current implementation mounts it on the product list and
 product search screens only.
 
-The endpoint is intentionally kept as the existing paged list so #13 can add filter and sort
-parameters to the same query builder. The 5,000/10,000-product performance benchmark belongs
+The same paged endpoint filters and sorts (FR-7.2, #13): `category_id` (including its
+subcategories), `min_price`/`max_price`, `stock_status` (`in_stock`, `low_stock`,
+`out_of_stock`), and `sort` (`relevance`, `name`, `price`, `stock`) with `order` (`asc`,
+`desc`). Filters combine with each other and with `q`; without `sort` a search is ordered by
+relevance and a plain listing by name. Stock and its filter and sort use the same scope as the
+stock column. A product is out of stock at zero, and low when it has an active low/out-of-stock
+alert in that scope (its stock is at or below a location's reorder threshold, FR-2.3). Price
+filters and sorts run in SQL; a stock filter or sort reads the stock of every matching product
+in one batched call and pages in Python. The frontend `ProductFilters` component sits under the
+search box on the product list and product search screens. The 5,000/10,000-product performance benchmark belongs
 to #35; it was not run in this change because the benchmark fixture and production-sized catalog
 are not part of the current test suite.
 
