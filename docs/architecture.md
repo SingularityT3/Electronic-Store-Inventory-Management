@@ -166,6 +166,23 @@ access-denied page for a URL typed by hand; the API enforces the same rule with 
 To add a screen, give its feature module a page component and replace the `PlaceholderPage` for
 its path in `App.tsx`. A new menu item is one entry in `NAV_ITEMS`.
 
+## Sales transaction recording
+
+The sales module exposes `POST /api/sales` for the cashier POS and
+`GET /api/sales/{id}` for receipt data. Checkout validates live catalog prices and active
+variants, merges duplicate items, sorts them by `(product_id, variant_id)`, and calls the stock
+module's row-locked `update_stock` operation in one database transaction. The sale, stock
+movements, payments, invoice and one `sale_recorded` audit entry commit together or roll back
+together. A zero balance reports `Out of stock`; a partial balance reports `Insufficient stock`,
+with all failing lines returned in one 409 response.
+
+GST is configured by `GST_RATE` (18% by default) and is applied after each line discount. Values
+are rounded half up to two decimals per line and totals are sums of stored line values. A discount
+is either a fixed amount or a percentage from 0 through 100 and cannot exceed the gross line
+amount. A nullable unique idempotency key makes a retry safe for the same user and location.
+Returns remain #25, invoice rendering remains #26, retention remains #27, and reporting
+integration remains #31.
+
 ## Product catalog
 
 The product API is mounted at `/api/product`. Product and category reads require

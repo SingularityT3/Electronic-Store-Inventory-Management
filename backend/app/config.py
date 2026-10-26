@@ -1,5 +1,6 @@
 """Environment-based configuration. All values come from environment variables."""
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
 
     product_image_dir: str = "/data/product-images"
     product_image_max_bytes: int = 5 * 1024 * 1024
+    gst_rate: Decimal = Decimal("18")
 
 
 @lru_cache

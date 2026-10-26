@@ -41,13 +41,16 @@ class Sale(Base):
     subtotal: Mapped[Decimal] = mapped_column(Money)
     tax_total: Mapped[Decimal] = mapped_column(Money, server_default=text("0"))
     total: Mapped[Decimal] = mapped_column(Money)
+    discount_total: Mapped[Decimal] = mapped_column(Money, server_default=text("0"))
     customer_name: Mapped[str | None] = mapped_column(String(200))
+    idempotency_key: Mapped[str | None] = mapped_column(String(100), unique=True)
     sold_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("status IN ('completed')", name="status"),
         CheckConstraint(
-            "subtotal >= 0 AND tax_total >= 0 AND total >= 0", name="amounts_non_negative"
+            "subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0 AND total >= 0",
+            name="amounts_non_negative",
         ),
         Index("ix_sales_location_sold_at", "location_id", "sold_at"),
         Index("ix_sales_sold_at", "sold_at"),
@@ -65,13 +68,14 @@ class SaleLine(Base):
     )
     quantity: Mapped[int]
     unit_price: Mapped[Decimal] = mapped_column(Money)
+    discount_amount: Mapped[Decimal] = mapped_column(Money, server_default=text("0"))
     tax_amount: Mapped[Decimal] = mapped_column(Money, server_default=text("0"))
     line_total: Mapped[Decimal] = mapped_column(Money)
 
     __table_args__ = (
         CheckConstraint("quantity > 0", name="quantity_positive"),
         CheckConstraint(
-            "unit_price >= 0 AND tax_amount >= 0 AND line_total >= 0",
+            "unit_price >= 0 AND discount_amount >= 0 AND tax_amount >= 0 AND line_total >= 0",
             name="amounts_non_negative",
         ),
         Index("ix_sale_lines_sale_id", "sale_id"),

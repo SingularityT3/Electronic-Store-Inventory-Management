@@ -15,7 +15,7 @@ import {
   ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
-import { SalesAvailabilityPage } from './modules/sales';
+import { PosPage } from './modules/sales';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import { PurchaseOrdersPage, SuppliersPage } from './modules/purchasing';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
@@ -116,7 +116,7 @@ export default function App() {
             ) : item.path === '/stock/transfer' ? (
               <StockTransferPage />
             ) : item.path === '/sales' ? (
-              <SalesAvailabilityPage />
+              <PosPage />
             ) : item.path === '/categories' ? (
               <CategoriesPage />
             ) : item.path === '/suppliers' ? (

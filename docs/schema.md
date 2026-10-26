@@ -61,6 +61,10 @@ Notes:
 
 - A rolled-back transaction leaves a gap in the invoice sequence. If gapless numbering is
   required, #26 can switch to a counter row locked in the sale transaction.
+- `sales.discount_total` and `sale_lines.discount_amount` store the rounded discount snapshots.
+  `sales.idempotency_key` is nullable and unique, so a retry cannot charge twice.
+- Sales compute GST on each discounted line using `GST_RATE`, round half up to two decimals, and
+  sum the stored line totals. Card numbers are never accepted or stored.
 - Category cycles deeper than self-parenting are left to the application (#10).
 - Retention and delete protection for sales, returns and invoices are #27.
 - Products and variants are soft-deleted (`is_active`), because sales and stock refer to them.
@@ -203,6 +207,8 @@ erDiagram
     }
     sales {
         int id PK
+        numeric discount_total
+        string idempotency_key UK
         numeric total
         timestamptz sold_at
     }

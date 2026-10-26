@@ -31,10 +31,18 @@ export async function api<T = void>(
       ? Object.fromEntries(
           data.detail
             .filter((item: unknown) => typeof item === 'object' && item !== null)
-            .map((item: { loc?: unknown[]; msg?: unknown }) => [
-              String(item.loc?.at(-1) ?? ''),
-              String(item.msg ?? ''),
-            ]),
+            .map(
+              (item: {
+                loc?: unknown[];
+                msg?: unknown;
+                line?: unknown;
+                field?: unknown;
+                message?: unknown;
+              }) => [
+                String(item.line ?? item.field ?? item.loc?.at(-1) ?? ''),
+                String(item.message ?? item.msg ?? ''),
+              ],
+            ),
         )
       : typeof data.detail === 'object' && data.detail !== null
         ? data.detail

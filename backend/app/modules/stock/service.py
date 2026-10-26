@@ -80,7 +80,12 @@ class StockTransferError(Exception):
         self.detail = detail
 
 
-def stock_positions(db: Session, *, location_id: int | None = None) -> list[StockPosition]:
+def stock_positions(
+    db: Session,
+    *,
+    location_id: int | None = None,
+    product_ids: Sequence[int] | None = None,
+) -> list[StockPosition]:
     """Read live stock with product metadata and cost through owning module interfaces.
 
     Empty rows of deleted products and variants (and of a base product that now has
@@ -93,9 +98,14 @@ def stock_positions(db: Session, *, location_id: int | None = None) -> list[Stoc
     )
     if location_id is not None:
         query = query.where(StockLevel.location_id == location_id)
+    if product_ids is not None:
+        ids = list(product_ids)
+        if not ids:
+            return []
+        query = query.where(StockLevel.product_id.in_(ids))
 
     item_metadata: dict[tuple[int, int | None], ProductStockItem] = {
-        (item.product_id, item.variant_id): item for item in product_stock_items(db)
+        (item.product_id, item.variant_id): item for item in product_stock_items(db, product_ids)
     }
     costs = {
         (product_id, variant_id): average_cost
@@ -459,7 +469,13 @@ class StockService(Protocol):
     never on `_internal`.
     """
 
-    def positions(self, db: Session, *, location_id: int | None = None) -> list[StockPosition]: ...
+    def positions(
+        self,
+        db: Session,
+        *,
+        location_id: int | None = None,
+        product_ids: Sequence[int] | None = None,
+    ) -> list[StockPosition]: ...
 
     def reevaluate_stock_alert(
         self, db: Session, *, product_id: int, variant_id: int | None, location_id: int
