@@ -92,4 +92,4 @@ import-linter and tests; frontend lint, tests and build; and a build of the prod
 To make failing checks block merging, enable branch protection on `main` (GitHub: Settings >
 Branches > Require status checks to pass: `backend`, `frontend`, `production-build`).
 
-Backups and monitoring are covered separately (backup and monitoring issues).
+Uptime monitoring and alerting: [`docs/monitoring.md`](monitoring.md). Backups are covered separately (#36).
