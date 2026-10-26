@@ -11,7 +11,16 @@ def _count(conn, table: str) -> int:
 def test_seed_is_repeatable(migrated_engine):
     seed(migrated_engine, "seed-test-password")
     with migrated_engine.connect() as conn:
-        first = {t: _count(conn, t) for t in ("products", "product_variants", "stock_levels")}
+        first = {
+            t: _count(conn, t)
+            for t in ("products", "product_variants", "stock_levels", "stock_alerts")
+        }
+        # Every fourth item is low at the first store, and has its alert.
+        low_levels = conn.execute(
+            text("SELECT count(*) FROM stock_levels WHERE quantity <= reorder_threshold")
+        ).scalar_one()
+        assert low_levels > 0
+        assert first["stock_alerts"] == low_levels
 
     seed(migrated_engine, "seed-test-password")
     with migrated_engine.connect() as conn:
