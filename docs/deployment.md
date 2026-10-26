@@ -9,6 +9,7 @@ ESIMS ships as containers, so the same steps work on any cloud VM or on a plain 
 | `migrate` | `backend/Dockerfile.prod`      | Runs `alembic upgrade head`, then exits                           |
 | `backend` | `backend/Dockerfile.prod`      | FastAPI behind uvicorn, non-root, starts after the migration      |
 | `web`     | `frontend/Dockerfile.prod`     | Caddy: serves the built SPA, proxies `/api`, terminates HTTPS     |
+| `backup`  | `backend/Dockerfile.backup`    | Daily database and image backup to `BACKUP_PATH`                  |
 
 Only `web` publishes ports (80 and 443). The database and API are reachable inside the Compose
 network only.
@@ -23,7 +24,7 @@ at the host (for a public certificate).
 ```bash
 git clone <repository-url> esims && cd esims
 cp .env.prod.example .env.prod
-# edit .env.prod: SITE_ADDRESS, POSTGRES_PASSWORD, DATABASE_URL
+# edit .env.prod: SITE_ADDRESS, POSTGRES_PASSWORD, DATABASE_URL, BACKUP_PATH
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 ```
 
@@ -57,6 +58,8 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `PRODUCT_IMAGE_MAX_BYTES` | Maximum upload size in bytes; defaults to 5 MiB, and must be at least 2 MiB for the required product-image test. |
 
 Never commit `.env.prod` (it is git-ignored).
+
+Set `BACKUP_PATH` to storage separate from this server; see [`backup-recovery.md`](backup-recovery.md).
 
 Product images are persisted in the `product-images` Docker volume mounted at
 `/data/product-images` in the backend. Keep this volume when restarting or replacing the
@@ -92,4 +95,4 @@ import-linter and tests; frontend lint, tests and build; and a build of the prod
 To make failing checks block merging, enable branch protection on `main` (GitHub: Settings >
 Branches > Require status checks to pass: `backend`, `frontend`, `production-build`).
 
-Uptime monitoring and alerting: [`docs/monitoring.md`](monitoring.md). Backups are covered separately (#36).
+Uptime monitoring and alerting: [`docs/monitoring.md`](monitoring.md). Backups and the recovery plan: [`docs/backup-recovery.md`](backup-recovery.md).
