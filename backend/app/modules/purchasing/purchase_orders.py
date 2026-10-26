@@ -129,10 +129,14 @@ def _validate_location(db: Session, location_id: int) -> None:
 def _validate_catalog_lines(
     db: Session, supplier_id: int, lines: list[PurchaseOrderLineInput]
 ) -> None:
-    items = _product_labels(db)
+    active_items = {
+        (item.product_id, item.variant_id)
+        for item in product_stock_items(db, {line.product_id for line in lines})
+        if item.is_active
+    }
     for line in lines:
         identity = (line.product_id, line.variant_id)
-        if identity not in items:
+        if identity not in active_items:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND,
                 "Product or variant not found.",
@@ -151,19 +155,20 @@ def _validate_catalog_lines(
             )
 
 
-def _product_labels(db: Session) -> dict[tuple[int, int | None], tuple[str, str]]:
+Labels = dict[tuple[int, int | None], tuple[str, str]]
+
+
+def _product_labels(db: Session, product_ids: set[int] | None = None) -> Labels:
     return {
         (item.product_id, item.variant_id): (
             item.product_name,
             item.variant_sku or item.sku,
         )
-        for item in product_stock_items(db)
+        for item in product_stock_items(db, product_ids)
     }
 
 
-def _line_out(
-    line: PurchaseOrderLine, labels: dict[tuple[int, int | None], tuple[str, str]]
-) -> PurchaseOrderLineOut:
+def _line_out(line: PurchaseOrderLine, labels: Labels) -> PurchaseOrderLineOut:
     product_name, sku = labels[(line.product_id, line.variant_id)]
     return PurchaseOrderLineOut(
         id=line.id,
@@ -178,7 +183,7 @@ def _line_out(
     )
 
 
-def _out(db: Session, order: PurchaseOrder) -> PurchaseOrderOut:
+def _out(db: Session, order: PurchaseOrder, labels: Labels | None = None) -> PurchaseOrderOut:
     supplier = db.get(Supplier, order.supplier_id)
     if supplier is None:
         raise RuntimeError(f"Purchase order {order.id} has no supplier.")
@@ -187,7 +192,8 @@ def _out(db: Session, order: PurchaseOrder) -> PurchaseOrderOut:
         .where(PurchaseOrderLine.purchase_order_id == order.id)
         .order_by(PurchaseOrderLine.id)
     ).all()
-    labels = _product_labels(db)
+    if labels is None:
+        labels = _product_labels(db, {line.product_id for line in lines})
     missing = [
         (line.product_id, line.variant_id)
         for line in lines
@@ -293,7 +299,8 @@ def list_purchase_orders(
     query = select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
     if order_status is not None:
         query = query.where(PurchaseOrder.status == order_status)
-    return [_out(db, order) for order in db.scalars(query)]
+    labels = _product_labels(db)
+    return [_out(db, order, labels) for order in db.scalars(query)]
 
 
 @router.get("/pending", response_model=list[PurchaseOrderOut])
@@ -306,7 +313,8 @@ def pending_purchase_orders(
         .where(PurchaseOrder.status.in_(PENDING_STATUSES))
         .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
     )
-    return [_out(db, order) for order in db.scalars(query)]
+    labels = _product_labels(db)
+    return [_out(db, order, labels) for order in db.scalars(query)]
 
 
 @router.post("", response_model=PurchaseOrderOut, status_code=status.HTTP_201_CREATED)

@@ -47,6 +47,10 @@ class NotificationsService(Protocol):
         self, db: Session, *, location_id: int | None = None
     ) -> list[StockAlertData]: ...
 
+    def resolve_stock_alerts(
+        self, db: Session, *, product_id: int, variant_ids: list[int | None] | None = None
+    ) -> None: ...
+
     def record_purchase_order_status(
         self,
         db: Session,

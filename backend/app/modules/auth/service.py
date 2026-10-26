@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth._internal.models import User
@@ -71,14 +71,17 @@ class LocationValidator(Protocol):
 
 
 def po_status_notification_recipients(db: Session, *, created_by_id: int) -> list[int]:
-    """Return Admins and the Manager who created a PO for its status notifications."""
-    recipient_ids = db.scalars(
-        select(User.id).where(
-            User.is_active,
-            or_(User.role == "admin", User.id == created_by_id),
+    """Return the active Admins and the Manager who created a PO (SRS A-6)."""
+    return list(
+        db.scalars(
+            select(User.id)
+            .where(
+                User.is_active,
+                or_(
+                    User.role == "admin",
+                    and_(User.id == created_by_id, User.role == "manager"),
+                ),
+            )
+            .order_by(User.id)
         )
-    ).all()
-    creator_role = db.scalar(select(User.role).where(User.id == created_by_id))
-    if creator_role != "manager":
-        recipient_ids = [user_id for user_id in recipient_ids if user_id != created_by_id]
-    return list(recipient_ids)
+    )

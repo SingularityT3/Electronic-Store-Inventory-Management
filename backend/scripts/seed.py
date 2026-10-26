@@ -24,6 +24,7 @@ from app.modules.product._internal.models import (
     ProductVariant,
 )
 from app.modules.purchasing._internal.models import Supplier, SupplierProduct
+from app.modules.stock import reevaluate_stock_alert
 from app.modules.stock._internal.models import ItemCost, Location, StockLevel
 from migrations import models  # noqa: F401  (registers every table, so all FKs resolve)
 
@@ -204,6 +205,9 @@ def seed(engine: Engine, password: str) -> None:
                         quantity=quantity,
                         reorder_threshold=5,
                     )
+                    # Seeded rows bypass update_stock, so raise their low-stock alerts here.
+                    session.flush()
+                    reevaluate_stock_alert(session, **item, location_id=location.id)
 
         for name, contact, skus in SUPPLIERS:
             supplier = _get_or_add(session, Supplier, {"name": name}, **contact)

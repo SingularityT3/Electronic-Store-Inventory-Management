@@ -156,3 +156,34 @@ def test_last_admin_and_self_protection(client, make_user):
     assert self_response.status_code == 403
     demote = admin.patch(f"/api/auth/users/{admin_id}", json={"role": "manager"})
     assert demote.status_code == 403
+
+
+def test_disabled_admin_can_be_edited_while_one_admin_is_active(client, make_user):
+    disabled = make_user("admin_old", role="admin", email="old@example.com", is_active=False)
+    admin = admin_client(client, make_user)
+    rename = admin.patch(f"/api/auth/users/{disabled.id}", json={"full_name": "Old Admin"})
+    assert rename.status_code == 200, rename.text
+    demote = admin.patch(f"/api/auth/users/{disabled.id}", json={"role": "manager"})
+    assert demote.status_code == 200, demote.text
+    assert admin.post(f"/api/auth/users/{disabled.id}/deactivate").status_code == 200
+
+
+def test_admin_unlocks_a_locked_account(client, make_user, db):
+    target = make_user("manager_locked", role="manager", email="locked@example.com")
+    target_client = TestClient(client.app)
+    for _ in range(5):
+        assert login(target_client, "manager_locked", "wrong-password").status_code == 401
+    assert login(target_client, "manager_locked").status_code == 423
+
+    admin = admin_client(client, make_user)
+    listed = admin.get("/api/auth/users").json()["users"]
+    assert next(u for u in listed if u["id"] == target.id)["is_locked"] is True
+    unlocked = admin.post(f"/api/auth/users/{target.id}/unlock")
+    assert unlocked.status_code == 200, unlocked.text
+    assert unlocked.json()["is_locked"] is False
+    assert "user_unlocked" in conn_actions(db)
+    assert login(target_client, "manager_locked").status_code == 200
+
+    make_user("manager_other", role="manager", email="other@example.com")
+    assert login(client, "manager_other").status_code == 200
+    assert client.post(f"/api/auth/users/{target.id}/unlock").status_code == 403

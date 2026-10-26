@@ -75,11 +75,29 @@ export interface ProductVariant {
   stock: number;
 }
 
+export type StockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
+export type ProductSort = 'relevance' | 'name' | 'price' | 'stock';
+
+/** Search, filters and sort for the product list (FR-7.1, FR-7.2). Empty values are left out. */
+export interface ProductQuery {
+  q?: string;
+  /** Includes the category's subcategories. */
+  category_id?: number;
+  min_price?: string;
+  max_price?: string;
+  stock_status?: StockStatus;
+  sort?: ProductSort;
+  order?: 'asc' | 'desc';
+}
+
 export const productApi = {
-  list: (page = 1, pageSize = 50, q = '') =>
-    api<ProductPage>(
-      `/product?page=${page}&page_size=${pageSize}${q ? `&q=${encodeURIComponent(q)}` : ''}`,
-    ),
+  list: (page = 1, pageSize = 50, query: ProductQuery = {}) => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== '') params.set(key, String(value));
+    }
+    return api<ProductPage>(`/product?${params}`);
+  },
   get: (id: number) => api<Product>(`/product/${id}`),
   categories: () => api<Category[]>('/product/categories'),
   category: (id: number) => api<Category>(`/product/categories/${id}`),

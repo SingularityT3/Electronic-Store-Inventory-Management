@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.modules.audit import audit_service
 from app.modules.auth import CurrentUser, Permission, require
-from app.modules.product import product_stock_items
+from app.modules.product import ProductStockItem, product_stock_items
 from app.modules.purchasing._internal.models import (
     PurchaseOrder,
     Supplier,
@@ -28,6 +28,18 @@ EMAIL_DOMAIN_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za
 OPEN_ORDER_STATUSES = ("draft", "submitted", "partially_received")
 
 
+def _clean_supplier_field(value: str | None, field: str | None) -> str | None:
+    """Trim a supplier field. A blank name is an error; other blank fields are cleared."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        if field == "name":
+            raise ValueError("Supplier name is required.")
+        return None
+    return value
+
+
 class SupplierInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     contact_name: str | None = Field(default=None, max_length=200)
@@ -37,8 +49,8 @@ class SupplierInput(BaseModel):
 
     @field_validator("name", "contact_name", "email", "phone", "address")
     @classmethod
-    def strip_strings(cls, value: str | None) -> str | None:
-        return value.strip() if value is not None else None
+    def strip_strings(cls, value: str | None, info: ValidationInfo) -> str | None:
+        return _clean_supplier_field(value, info.field_name)
 
 
 class SupplierUpdate(BaseModel):
@@ -50,8 +62,8 @@ class SupplierUpdate(BaseModel):
 
     @field_validator("name", "contact_name", "email", "phone", "address")
     @classmethod
-    def strip_strings(cls, value: str | None) -> str | None:
-        return value.strip() if value is not None else None
+    def strip_strings(cls, value: str | None, info: ValidationInfo) -> str | None:
+        return _clean_supplier_field(value, info.field_name)
 
 
 class SupplierOut(BaseModel):
@@ -167,30 +179,30 @@ def _audit(
     )
 
 
-def _product_item(db: Session, product_id: int, variant_id: int | None) -> tuple[str, str]:
-    items = product_stock_items(db)
-    product = next((item for item in items if item.product_id == product_id), None)
-    if product is None:
+def _product_item(
+    db: Session, product_id: int, variant_id: int | None, *, for_new_entry: bool = False
+) -> tuple[str, str]:
+    """The name and SKU of a catalog item. A new entry needs an item that can be ordered."""
+    items = product_stock_items(db, [product_id])
+    if not items or (for_new_entry and not any(item.is_active for item in items)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found.")
-    if variant_id is not None:
-        variant = next(
-            (
-                item
-                for item in items
-                if item.product_id == product_id and item.variant_id == variant_id
-            ),
-            None,
+    item = next((item for item in items if item.variant_id == variant_id), None)
+    if variant_id is not None and (item is None or (for_new_entry and not item.is_active)):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Variant does not belong to product."
         )
-        if variant is None:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "Variant does not belong to product."
-            )
-        return variant.product_name, variant.variant_sku or variant.sku
-    return product.product_name, product.sku
+    if item is None or (for_new_entry and not item.is_active):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "This product has variants. Choose a variant.",
+        )
+    return item.product_name, item.variant_sku or item.sku
 
 
-def _supplier_product_out(db: Session, entry: SupplierProduct) -> SupplierProductOut:
-    product_name, product_sku = _product_item(db, entry.product_id, entry.variant_id)
+def _supplier_product_out(
+    entry: SupplierProduct, items: dict[tuple[int, int | None], ProductStockItem]
+) -> SupplierProductOut:
+    item = items[(entry.product_id, entry.variant_id)]
     return SupplierProductOut(
         id=entry.id,
         supplier_id=entry.supplier_id,
@@ -198,9 +210,18 @@ def _supplier_product_out(db: Session, entry: SupplierProduct) -> SupplierProduc
         variant_id=entry.variant_id,
         supplier_sku=entry.supplier_sku,
         supplier_price=entry.supplier_price,
-        product_name=product_name,
-        product_sku=product_sku,
+        product_name=item.product_name,
+        product_sku=item.variant_sku or item.sku,
     )
+
+
+def _catalog_items(
+    db: Session, entries: list[SupplierProduct]
+) -> dict[tuple[int, int | None], ProductStockItem]:
+    return {
+        (item.product_id, item.variant_id): item
+        for item in product_stock_items(db, {entry.product_id for entry in entries})
+    }
 
 
 @router.get(
@@ -345,8 +366,9 @@ def list_supplier_products(supplier_id: int, db: DbSession) -> list[SupplierProd
         select(SupplierProduct)
         .where(SupplierProduct.supplier_id == supplier_id)
         .order_by(SupplierProduct.product_id, SupplierProduct.variant_id, SupplierProduct.id)
-    )
-    return [_supplier_product_out(db, row) for row in rows]
+    ).all()
+    items = _catalog_items(db, list(rows))
+    return [_supplier_product_out(row, items) for row in rows]
 
 
 @router.post(
@@ -361,7 +383,9 @@ def add_supplier_product(
     user: Annotated[CurrentUser, Depends(require(Permission.SUPPLIERS_MANAGE))],
 ) -> SupplierProductOut:
     _active_supplier(db, supplier_id)
-    product_name, product_sku = _product_item(db, body.product_id, body.variant_id)
+    product_name, product_sku = _product_item(
+        db, body.product_id, body.variant_id, for_new_entry=True
+    )
     existing = db.scalar(
         select(SupplierProduct.id).where(
             SupplierProduct.supplier_id == supplier_id,
@@ -458,7 +482,7 @@ def update_supplier_product(
     )
     _commit(db)
     db.refresh(entry)
-    return _supplier_product_out(db, entry)
+    return _supplier_product_out(entry, _catalog_items(db, [entry]))
 
 
 @router.delete(

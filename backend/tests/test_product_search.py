@@ -100,8 +100,10 @@ def test_search_is_literal_live_and_location_scoped(client, db, make_user):
     response = client.get("/api/product", params={"q": "%"})
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json()["total"] == 0
-    assert client.get("/api/product", params={"q": "100%"}).json()["total"] == 0
+    # Wildcards are literal: "%" matches only text that contains a percent sign.
+    assert [item["id"] for item in response.json()["items"]] == [product.id]
+    assert client.get("/api/product", params={"q": "100%"}).json()["total"] == 1
+    assert client.get("/api/product", params={"q": "10_%"}).json()["total"] == 0
 
     login(client, staff.username)
     scoped = client.get("/api/product", params={"q": "O'Brien"}).json()

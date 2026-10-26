@@ -16,6 +16,8 @@ interface StockLevel {
   location_name: string;
   quantity: number;
   total_quantity: number;
+  reorder_threshold: number;
+  reorder_to_level: number;
 }
 
 interface Location {
@@ -134,10 +136,113 @@ function AdjustStockForm({
   );
 }
 
+/** Reorder threshold and reorder-to level for one item at one location (FR-2.3, SRS A-4). */
+function ReorderSettingsForm({
+  row,
+  onDone,
+  onCancel,
+}: {
+  row: StockLevel;
+  onDone: (message: string) => void;
+  onCancel: () => void;
+}) {
+  const [threshold, setThreshold] = useState(String(row.reorder_threshold));
+  const [reorderTo, setReorderTo] = useState(
+    row.reorder_to_level === 2 * row.reorder_threshold ? '' : String(row.reorder_to_level),
+  );
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    const parsedThreshold = Number(threshold);
+    const parsedReorderTo = reorderTo.trim() === '' ? null : Number(reorderTo);
+    if (!Number.isSafeInteger(parsedThreshold) || parsedThreshold < 0) {
+      setError('Enter a whole-number threshold of 0 or more.');
+      return;
+    }
+    if (
+      parsedReorderTo !== null &&
+      (!Number.isSafeInteger(parsedReorderTo) || parsedReorderTo < parsedThreshold)
+    ) {
+      setError('Reorder-to level must be a whole number at or above the threshold.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api('/stock/levels/reorder-settings', {
+        method: 'PATCH',
+        body: {
+          product_id: row.product_id,
+          variant_id: row.variant_id,
+          location_id: row.location_id,
+          reorder_threshold: parsedThreshold,
+          reorder_to_level: parsedReorderTo,
+        },
+      });
+      onDone(`Reorder settings saved for ${itemLabel(row)} at ${row.location_name}.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Could not save reorder settings.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form aria-label="Reorder settings" onSubmit={submit}>
+      <h2>
+        Reorder settings: {itemLabel(row)} at {row.location_name}
+      </h2>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <FormField
+        label="Reorder threshold"
+        hint="A low-stock alert is raised when stock is at or below this level."
+      >
+        {(field) => (
+          <input
+            {...field}
+            type="number"
+            min="0"
+            step="1"
+            value={threshold}
+            onChange={(event) => setThreshold(event.target.value)}
+          />
+        )}
+      </FormField>
+      <FormField
+        label="Reorder-to level"
+        hint="Leave blank to use twice the threshold. The reorder report suggests ordering up to it."
+      >
+        {(field) => (
+          <input
+            {...field}
+            type="number"
+            min="0"
+            step="1"
+            value={reorderTo}
+            onChange={(event) => setReorderTo(event.target.value)}
+          />
+        )}
+      </FormField>
+      <button type="submit" disabled={submitting}>
+        {submitting ? 'Saving…' : 'Save reorder settings'}
+      </button>{' '}
+      <button type="button" onClick={onCancel}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
 export default function StockLevelsPage() {
   const { user } = useAuth();
   const canAdjust = can(user, 'stock.adjust');
   const [adjusting, setAdjusting] = useState<StockLevel | null>(null);
+  const [configuring, setConfiguring] = useState<StockLevel | null>(null);
   const [notice, setNotice] = useState('');
   const [levels, setLevels] = useState<StockLevel[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -220,6 +325,18 @@ export default function StockLevelsPage() {
               }}
             />
           )}
+          {configuring && (
+            <ReorderSettingsForm
+              key={`${configuring.product_id}-${configuring.variant_id}-${configuring.location_id}`}
+              row={configuring}
+              onCancel={() => setConfiguring(null)}
+              onDone={(message) => {
+                setConfiguring(null);
+                setNotice(message);
+                setReloadCount((count) => count + 1);
+              }}
+            />
+          )}
           <form className="audit-filters" aria-label="Filter stock levels">
             <label>
               Location
@@ -275,21 +392,42 @@ export default function StockLevelsPage() {
               { header: 'Location', cell: (row) => row.location_name },
               { header: 'Quantity', cell: (row) => row.quantity },
               { header: 'Combined total', cell: (row) => row.total_quantity },
+              {
+                header: 'Reorder threshold',
+                cell: (row) =>
+                  row.quantity <= row.reorder_threshold
+                    ? `${row.reorder_threshold} (${row.quantity === 0 ? 'out of stock' : 'low'})`
+                    : row.reorder_threshold,
+              },
               ...(canAdjust
                 ? [
                     {
                       header: 'Actions',
                       cell: (row: StockLevel) => (
-                        <button
-                          type="button"
-                          aria-label={`Adjust ${itemLabel(row)} at ${row.location_name}`}
-                          onClick={() => {
-                            setNotice('');
-                            setAdjusting(row);
-                          }}
-                        >
-                          Adjust
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Adjust ${itemLabel(row)} at ${row.location_name}`}
+                            onClick={() => {
+                              setNotice('');
+                              setConfiguring(null);
+                              setAdjusting(row);
+                            }}
+                          >
+                            Adjust
+                          </button>{' '}
+                          <button
+                            type="button"
+                            aria-label={`Reorder settings for ${itemLabel(row)} at ${row.location_name}`}
+                            onClick={() => {
+                              setNotice('');
+                              setAdjusting(null);
+                              setConfiguring(row);
+                            }}
+                          >
+                            Reorder settings
+                          </button>
+                        </>
                       ),
                     },
                   ]

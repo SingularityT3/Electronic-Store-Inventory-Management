@@ -8,6 +8,7 @@ from app.modules.product.service import (
     ProductService,
     ProductStockItem,
     StockCheck,
+    product_stock_item,
     product_stock_items,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "ProductService",
     "ProductStockItem",
     "StockCheck",
+    "product_stock_item",
     "product_stock_items",
 ]

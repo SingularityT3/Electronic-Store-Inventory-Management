@@ -72,6 +72,8 @@ class ManagedUserOut(BaseModel):
     role: Literal["admin", "manager", "staff", "cashier"]
     location_id: int | None
     is_active: bool
+    is_locked: bool = False
+    """Locked out after repeated failed logins (SRS A-12); an Admin can unlock it early."""
 
 
 class UserPage(BaseModel):
@@ -135,7 +137,9 @@ def _user_out(user: User | CurrentUser) -> UserOut:
 
 
 def _managed_user(user: User) -> ManagedUserOut:
-    return ManagedUserOut.model_validate(user, from_attributes=True)
+    out = ManagedUserOut.model_validate(user, from_attributes=True)
+    out.is_locked = user.locked_until is not None and user.locked_until > utcnow()
+    return out
 
 
 def _field_error(field: str, message: str, code: int = status.HTTP_422_UNPROCESSABLE_ENTITY):
@@ -217,11 +221,13 @@ def _ensure_admin_safety(
         _field_error(
             "is_active" if not active else "role", "You cannot disable or demote yourself.", 403
         )
-    if target.role == "admin" and (new_role != "admin" or not active):
-        count = (
-            db.scalar(select(func.count(User.id)).where(User.role == "admin", User.is_active)) or 0
-        )
-        if count <= 1:
+    # Only an active Admin counts; editing an already disabled Admin is always allowed.
+    if target.role == "admin" and target.is_active and (new_role != "admin" or not active):
+        # Lock the active Admins, so two concurrent demotions cannot remove the last one.
+        active_admins = db.scalars(
+            select(User.id).where(User.role == "admin", User.is_active).with_for_update()
+        ).all()
+        if len(active_admins) <= 1:
             _field_error(
                 "role" if new_role != "admin" else "is_active",
                 "The last active Admin cannot be disabled or demoted.",
@@ -500,6 +506,36 @@ def reactivate_user(
     actor: Annotated[CurrentUser, Depends(require(Permission.USERS_MANAGE))],
 ) -> ManagedUserOut:
     return _set_active(user_id, db, actor, True)
+
+
+@router.post("/users/{user_id}/unlock")
+def unlock_user(
+    user_id: int,
+    db: DbSession,
+    actor: Annotated[CurrentUser, Depends(require(Permission.USERS_MANAGE))],
+) -> ManagedUserOut:
+    """End a login lockout before it expires (SRS A-12, FR5.2-ST-2)."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found.")
+    if user.locked_until is None and user.failed_login_count == 0:
+        return _managed_user(user)
+    before = {"locked_until": user.locked_until, "failed_login_count": user.failed_login_count}
+    user.locked_until = None
+    user.failed_login_count = 0
+    audit_service.record(
+        db,
+        module="auth",
+        action="user_unlocked",
+        user_id=actor.id,
+        username=actor.username,
+        entity_type="user",
+        entity_id=str(user.id),
+        before=before,
+        after={"locked_until": None, "failed_login_count": 0},
+    )
+    db.commit()
+    return _managed_user(user)
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)

@@ -72,6 +72,13 @@ export const NAV_ITEMS: NavItem[] = [
     deniedLabel: 'stock transfers',
   },
   {
+    path: '/locations',
+    label: 'Locations',
+    group: 'Inventory',
+    permission: 'locations.manage',
+    deniedLabel: 'location management',
+  },
+  {
     path: '/suppliers',
     label: 'Suppliers',
     group: 'Purchasing',

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { can, useAuth } from '../auth';
 import { DataTable, EmptyState, SearchBox } from '../../shell/components';
-import { productApi, type Product } from './api';
+import { productApi, type Product, type ProductQuery } from './api';
+import ProductFilters from './ProductFilters';
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const PAGE_SIZE = 50;
@@ -12,6 +13,7 @@ export default function ProductSearchPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<Omit<ProductQuery, 'q'>>({});
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,7 @@ export default function ProductSearchPage() {
     setLoading(true);
     setError('');
     productApi
-      .list(page, PAGE_SIZE, query)
+      .list(page, PAGE_SIZE, { ...filters, q: query })
       .then((result) => {
         if (current) {
           setProducts(result.items);
@@ -38,7 +40,7 @@ export default function ProductSearchPage() {
     return () => {
       current = false;
     };
-  }, [page, query]);
+  }, [page, query, filters]);
 
   function search(value: string) {
     setPage(1);
@@ -51,6 +53,12 @@ export default function ProductSearchPage() {
         <h1>Product search</h1>
       </header>
       <SearchBox onSearch={search} />
+      <ProductFilters
+        onApply={(value) => {
+          setPage(1);
+          setFilters(value);
+        }}
+      />
       {error && (
         <p role="alert" className="error">
           {error}
@@ -60,7 +68,10 @@ export default function ProductSearchPage() {
         <p>Loading products...</p>
       ) : products.length === 0 ? (
         <EmptyState message="No products found">
-          <p>Try a shorter search, check the spelling, or search by SKU, brand or category.</p>
+          <p>
+            Try a shorter search, check the spelling, search by SKU, brand or category, or clear the
+            filters.
+          </p>
         </EmptyState>
       ) : (
         <DataTable

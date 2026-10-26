@@ -3,12 +3,19 @@ import { Link } from 'react-router-dom';
 import { ApiError } from '../../api';
 import { can, useAuth } from '../auth';
 import { ConfirmDialog, DataTable, SearchBox } from '../../shell/components';
-import { productApi, type Product, type ProductPage } from './api';
+import { productApi, type Product, type ProductPage, type ProductQuery } from './api';
+import ProductFilters from './ProductFilters';
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const PAGE_SIZE = 50;
 
-export default function ProductListPage() {
+export default function ProductListPage({
+  title = 'Products',
+  intro,
+}: {
+  title?: string;
+  intro?: string;
+} = {}) {
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [page, setPage] = useState(1);
@@ -18,13 +25,14 @@ export default function ProductListPage() {
   const [message, setMessage] = useState('');
   const [deleting, setDeleting] = useState<Product | null>(null);
   const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState<Omit<ProductQuery, 'q'>>({});
 
   const load = useCallback(
     (currentPage = page) => {
       setLoading(true);
       setError('');
       productApi
-        .list(currentPage, PAGE_SIZE, query)
+        .list(currentPage, PAGE_SIZE, { ...filters, q: query })
         .then((result: ProductPage) => {
           setProducts(result.items);
           setTotal(result.total);
@@ -32,7 +40,7 @@ export default function ProductListPage() {
         .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load products.'))
         .finally(() => setLoading(false));
     },
-    [page, query],
+    [page, query, filters],
   );
 
   useEffect(() => load(page), [load, page]);
@@ -53,17 +61,24 @@ export default function ProductListPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1>Products</h1>
+        <h1>{title}</h1>
         {can(user, 'products.manage') && (
           <Link to="/products/new">
             <button type="button">Add product</button>
           </Link>
         )}
       </header>
+      {intro && <p>{intro}</p>}
       <SearchBox
         value={query}
         onSearch={(value) => {
           setQuery(value);
+          setPage(1);
+        }}
+      />
+      <ProductFilters
+        onApply={(value) => {
+          setFilters(value);
           setPage(1);
         }}
       />
@@ -90,6 +105,7 @@ export default function ProductListPage() {
             { header: 'Category', cell: (product) => product.category_name },
             { header: 'Brand', cell: (product) => product.brand },
             { header: 'Price', cell: (product) => money.format(Number(product.price)) },
+            { header: 'Stock', cell: (product) => product.stock },
             ...(can(user, 'products.manage')
               ? [
                   {

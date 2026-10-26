@@ -8,6 +8,7 @@ from app.modules.notifications._internal.service import (
     active_stock_alerts,
     record_purchase_order_status,
     reevaluate_stock_alert,
+    resolve_stock_alerts,
 )
 from app.modules.notifications.service import NotificationsService, StockAlertData
 
@@ -17,4 +18,5 @@ __all__ = [
     "active_stock_alerts",
     "reevaluate_stock_alert",
     "record_purchase_order_status",
+    "resolve_stock_alerts",
 ]

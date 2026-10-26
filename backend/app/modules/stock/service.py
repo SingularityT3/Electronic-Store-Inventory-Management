@@ -12,11 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit import audit_service
 from app.modules.notifications import reevaluate_stock_alert as save_stock_alert
-from app.modules.product import ProductStockItem, product_stock_items
+from app.modules.product import ProductStockItem, product_stock_item, product_stock_items
 from app.modules.stock._internal.models import (
     ItemCost,
     Location,
-    SerialNumber,
     StockLevel,
     StockMovement,
     StockTransfer,
@@ -82,7 +81,11 @@ class StockTransferError(Exception):
 
 
 def stock_positions(db: Session, *, location_id: int | None = None) -> list[StockPosition]:
-    """Read live stock with product metadata and cost through owning module interfaces."""
+    """Read live stock with product metadata and cost through owning module interfaces.
+
+    Empty rows of deleted products and variants (and of a base product that now has
+    variants) are left out; rows that still hold stock are always shown.
+    """
     query = (
         select(StockLevel, Location.name)
         .join(Location, Location.id == StockLevel.location_id)
@@ -107,6 +110,8 @@ def stock_positions(db: Session, *, location_id: int | None = None) -> list[Stoc
         item = item_metadata.get(key)
         if item is None:
             raise RuntimeError(f"Missing product metadata for stock item {key}.")
+        if not item.is_active and level.quantity == 0:
+            continue
 
         positions.append(
             StockPosition(
@@ -153,14 +158,7 @@ def reevaluate_stock_alert(
         return
 
     level, location_name = row
-    item = next(
-        (
-            item
-            for item in product_stock_items(db)
-            if item.product_id == product_id and item.variant_id == variant_id
-        ),
-        None,
-    )
+    item = product_stock_item(db, product_id, variant_id)
     if item is None:
         raise RuntimeError(f"Missing product metadata for stock item {(product_id, variant_id)}.")
 
@@ -212,11 +210,9 @@ def update_stock(
     if movement_type in {"sale", "transfer_out"} and quantity_delta > 0:
         raise ValueError(f"{movement_type} movements must decrease stock.")
 
-    item_exists = any(
-        item.product_id == product_id and item.variant_id == variant_id
-        for item in product_stock_items(db)
-    )
-    if not item_exists:
+    # Stock already held by an item that has since been deleted may still be taken out.
+    item = product_stock_item(db, product_id, variant_id)
+    if item is None or (quantity_delta > 0 and not item.is_active):
         raise ValueError("Product or variant not found.")
 
     with db.begin_nested():
@@ -333,11 +329,8 @@ def transfer_stock(
                     404, "An active source or destination location was not found."
                 )
 
-            item_exists = any(
-                item.product_id == product_id and item.variant_id == variant_id
-                for item in product_stock_items(db)
-            )
-            if not item_exists:
+            item = product_stock_item(db, product_id, variant_id)
+            if item is None or not item.is_active:
                 raise StockTransferError(404, "Product or variant not found.")
 
             transfer = StockTransfer(
@@ -504,46 +497,24 @@ class StockService(Protocol):
     ) -> StockTransferResult: ...
 
 
-def has_stock(db: Session, product_id: int) -> bool:
-    """Return whether a product or variant has stock on hand."""
-    return bool(
-        db.scalar(
-            select(
-                exists().where(
-                    StockLevel.product_id == product_id,
-                    StockLevel.quantity > 0,
-                )
-            )
-        )
-        or db.scalar(
-            select(
-                exists().where(
-                    SerialNumber.product_id == product_id,
-                    SerialNumber.status == "in_stock",
-                )
-            )
-        )
-    )
-
-
 def stock_quantities(
     db: Session,
     product_ids: int | Sequence[int],
     location_id: int | None = None,
     all_locations: bool = True,
 ) -> dict[int, dict[int | None, int]]:
-    """Return batched on-hand quantities, optionally scoped to one location."""
+    """Return batched on-hand quantities, optionally scoped to one location.
+
+    `stock_levels` is the single count of on-hand stock (#18 makes `update_stock` the only
+    path that changes it), so serialised units (#17) must be counted there when received and
+    `serial_numbers` rows are not added on top.
+    """
     ids = [product_ids] if isinstance(product_ids, int) else list(product_ids)
     if not ids:
         return {}
     stock_filter = [StockLevel.product_id.in_(ids)]
-    serial_filter = [
-        SerialNumber.product_id.in_(ids),
-        SerialNumber.status == "in_stock",
-    ]
     if not all_locations:
         stock_filter.append(StockLevel.location_id == location_id)
-        serial_filter.append(SerialNumber.location_id == location_id)
     rows = db.execute(
         select(StockLevel.variant_id, func.coalesce(func.sum(StockLevel.quantity), 0))
         .add_columns(StockLevel.product_id)
@@ -553,15 +524,6 @@ def stock_quantities(
     quantities: dict[int, dict[int | None, int]] = {}
     for variant_id, quantity, product_id in rows:
         quantities.setdefault(product_id, {})[variant_id] = int(quantity)
-    serial_rows = db.execute(
-        select(SerialNumber.variant_id, func.count())
-        .add_columns(SerialNumber.product_id)
-        .where(*serial_filter)
-        .group_by(SerialNumber.product_id, SerialNumber.variant_id)
-    )
-    for variant_id, quantity, product_id in serial_rows:
-        product_quantities = quantities.setdefault(product_id, {})
-        product_quantities[variant_id] = product_quantities.get(variant_id, 0) + int(quantity)
     return quantities
 
 

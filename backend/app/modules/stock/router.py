@@ -11,8 +11,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_session
+from app.modules.audit import audit_service, changes
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
-from app.modules.product import product_stock_items
+from app.modules.product import product_stock_item
 from app.modules.stock import (
     adjust_stock,
     reevaluate_stock_alert,
@@ -154,9 +155,12 @@ class LocationUpdate(BaseModel):
         return value
 
 
-def _commit_location(db: Session) -> None:
+def _commit_location(db: Session, *, flush_only: bool = False) -> None:
     try:
-        db.commit()
+        if flush_only:
+            db.flush()
+        else:
+            db.commit()
     except IntegrityError as exc:
         db.rollback()
         constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
@@ -241,12 +245,23 @@ def update_reorder_settings(
     if location is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
 
-    item_exists = any(
-        item.product_id == body.product_id and item.variant_id == body.variant_id
-        for item in product_stock_items(db)
-    )
-    if not item_exists:
+    item = product_stock_item(db, body.product_id, body.variant_id)
+    if item is None or not item.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Stock item not found.")
+
+    if "reorder_to_level" not in body.model_fields_set:
+        current_to_level = db.scalar(
+            select(StockLevel.reorder_to_level).where(
+                StockLevel.product_id == body.product_id,
+                StockLevel.variant_id.is_not_distinct_from(body.variant_id),
+                StockLevel.location_id == body.location_id,
+            )
+        )
+        if current_to_level is not None and current_to_level < body.reorder_threshold:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Reorder-to level cannot be below the reorder threshold.",
+            )
 
     statement = (
         insert(StockLevel)
@@ -275,6 +290,13 @@ def update_reorder_settings(
             },
         )
     )
+    previous = db.execute(
+        select(StockLevel.reorder_threshold, StockLevel.reorder_to_level).where(
+            StockLevel.product_id == body.product_id,
+            StockLevel.variant_id.is_not_distinct_from(body.variant_id),
+            StockLevel.location_id == body.location_id,
+        )
+    ).one_or_none()
     db.execute(statement)
     db.flush()
     reevaluate_stock_alert(
@@ -292,6 +314,26 @@ def update_reorder_settings(
     )
     if level is None:
         raise RuntimeError("Stock level was not available after updating reorder settings.")
+    db.refresh(level)
+    old, new = changes(
+        {
+            "reorder_threshold": previous.reorder_threshold if previous else None,
+            "reorder_to_level": previous.reorder_to_level if previous else None,
+        },
+        {"reorder_threshold": level.reorder_threshold, "reorder_to_level": level.reorder_to_level},
+    )
+    if old:
+        audit_service.record(
+            db,
+            module="stock",
+            action="reorder_settings_updated",
+            user_id=user.id,
+            username=user.username,
+            entity_type="stock_level",
+            entity_id=f"{body.product_id}:{body.variant_id}:{body.location_id}",
+            before=old,
+            after=new,
+        )
     db.commit()
     db.refresh(level)
     return ReorderSettingsOut(
@@ -303,17 +345,60 @@ def update_reorder_settings(
     )
 
 
+def _location_snapshot(location: Location) -> dict[str, object]:
+    return {
+        "name": location.name,
+        "type": location.type,
+        "address": location.address,
+        "is_active": location.is_active,
+    }
+
+
+def _audit_location(
+    db: Session,
+    user: CurrentUser,
+    action: str,
+    location: Location,
+    before: dict[str, object] | None,
+    after: dict[str, object],
+) -> None:
+    audit_service.record(
+        db,
+        module="stock",
+        action=action,
+        user_id=user.id,
+        username=user.username,
+        entity_type="location",
+        entity_id=str(location.id),
+        before=before,
+        after=after,
+    )
+
+
+@router.get("/locations/all", response_model=list[ManagedLocationOut])
+def list_all_locations(
+    db: Annotated[Session, Depends(get_session)],
+    _user: Annotated[CurrentUser, Depends(require(Permission.LOCATIONS_MANAGE))],
+) -> list[ManagedLocationOut]:
+    """Every location, inactive ones included, for the location management screen."""
+    locations = db.scalars(select(Location).order_by(Location.name)).all()
+    return [ManagedLocationOut.model_validate(item, from_attributes=True) for item in locations]
+
+
 @router.post(
     "/locations",
     response_model=ManagedLocationOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require(Permission.LOCATIONS_MANAGE))],
 )
 def create_location(
-    body: LocationCreate, db: Annotated[Session, Depends(get_session)]
+    body: LocationCreate,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.LOCATIONS_MANAGE))],
 ) -> ManagedLocationOut:
     location = Location(**body.model_dump())
     db.add(location)
+    _commit_location(db, flush_only=True)
+    _audit_location(db, user, "location_created", location, None, _location_snapshot(location))
     _commit_location(db)
     db.refresh(location)
     return ManagedLocationOut.model_validate(location, from_attributes=True)
@@ -322,12 +407,12 @@ def create_location(
 @router.patch(
     "/locations/{location_id}",
     response_model=ManagedLocationOut,
-    dependencies=[Depends(require(Permission.LOCATIONS_MANAGE))],
 )
 def update_location(
     location_id: int,
     body: LocationUpdate,
     db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.LOCATIONS_MANAGE))],
 ) -> ManagedLocationOut:
     location = db.get(Location, location_id)
     if location is None:
@@ -343,8 +428,12 @@ def update_location(
                 f"Location {field} cannot be null.",
             )
 
+    before = _location_snapshot(location)
     for field, value in values.items():
         setattr(location, field, value)
+    old, new = changes(before, _location_snapshot(location))
+    if old:
+        _audit_location(db, user, "location_updated", location, old, new)
     _commit_location(db)
     db.refresh(location)
     return ManagedLocationOut.model_validate(location, from_attributes=True)
