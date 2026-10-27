@@ -94,6 +94,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'Stock transfer',
     'Locations',
     'Suppliers',
+    'Supplier price history',
     'Purchase orders',
     'PO receiving',
     'Sales',
@@ -112,6 +113,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'Stock transfer',
     'Locations',
     'Suppliers',
+    'Supplier price history',
     'Purchase orders',
     'PO receiving',
     'Sales',
@@ -165,6 +167,8 @@ test('a menu link opens its screen', async () => {
 // FR1.1-ST-2, FR1.2-ST-2, FR3.1-ST-2, FR5.1-ST-2, FR5.3-ST-2: a URL typed by hand is still blocked.
 test.each([
   ['cashier', '/suppliers', 'supplier management'],
+  ['staff', '/suppliers/price-history', 'supplier price history'],
+  ['cashier', '/suppliers/price-history', 'supplier price history'],
   ['staff', '/categories', 'category management'],
   ['staff', '/purchase-orders', 'purchase orders'],
   ['manager', '/users', 'user management'],

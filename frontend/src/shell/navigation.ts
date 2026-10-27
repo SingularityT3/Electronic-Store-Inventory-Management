@@ -86,6 +86,13 @@ export const NAV_ITEMS: NavItem[] = [
     deniedLabel: 'supplier management',
   },
   {
+    path: '/suppliers/price-history',
+    label: 'Supplier price history',
+    group: 'Purchasing',
+    permission: 'suppliers.manage',
+    deniedLabel: 'supplier price history',
+  },
+  {
     path: '/purchase-orders',
     label: 'Purchase orders',
     group: 'Purchasing',
