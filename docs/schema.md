@@ -78,6 +78,9 @@ Notes:
   predefined values are stored using their canonical spelling.
 - `stock_levels.reorder_to_level` NULL means 2 × `reorder_threshold` (A-4).
   `item_costs.average_cost` NULL means "cost not set" (A-3).
+- Purchase receipts count accepted and damaged delivered quantities against the PO; short
+  quantities remain outstanding. Only accepted units enter sellable stock and weighted cost.
+  `po_receipt_lines.discrepancy_note` records damaged/short explanations.
 - Search indexes (NFR-1, FR-7): `pg_trgm` GIN indexes on product name, SKU and brand, and on
   variant SKU, plus btree indexes on category, brand and price.
 
@@ -234,6 +237,7 @@ erDiagram
         int quantity_damaged
         int quantity_short
         numeric unit_price
+        text discrepancy_note
     }
     supplier_price_history {
         bigint id PK

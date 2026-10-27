@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Protocol
 
 from sqlalchemy import exists, func, select
@@ -257,29 +257,32 @@ def receive_serial_stock(
     variant_id: int | None,
     location_id: int,
     serial_numbers: Sequence[str],
+    damaged_serial_numbers: Sequence[str] = (),
     user_id: int,
     username: str,
     reference_type: str,
     reference_id: int,
 ) -> tuple[int, ...]:
-    """Register unique serial units and their aggregate stock atomically."""
+    """Register accepted and damaged serial units; only accepted units increase stock."""
     item = _tracked_item(db, product_id, variant_id)
     cleaned = [serial.strip() for serial in serial_numbers]
+    damaged = [serial.strip() for serial in damaged_serial_numbers]
     if item.tracking_mode != "serial":
         raise ValueError("Product is not configured for serial tracking.")
-    if not cleaned:
+    if not cleaned and not damaged:
         raise ValueError("At least one non-empty serial number is required.")
-    if any(not serial for serial in cleaned):
+    if any(not serial for serial in [*cleaned, *damaged]):
         raise ValueError("Serial numbers cannot be empty.")
-    if any(len(serial) > 100 for serial in cleaned):
+    if any(len(serial) > 100 for serial in [*cleaned, *damaged]):
         raise ValueError("Serial numbers must be no longer than 100 characters.")
-    if len(cleaned) != len(set(cleaned)):
+    all_serials = [*cleaned, *damaged]
+    if len(all_serials) != len(set(all_serials)):
         raise ValueError("Duplicate serial number")
     if not reference_type.strip() or len(reference_type) > 50 or reference_id <= 0:
         raise ValueError("A valid receipt reference is required.")
     try:
         with db.begin_nested():
-            serial_rows = [
+            accepted_rows = [
                 SerialNumber(
                     serial_number=serial,
                     product_id=product_id,
@@ -289,27 +292,91 @@ def receive_serial_stock(
                 )
                 for serial in cleaned
             ]
+            damaged_rows = [
+                SerialNumber(
+                    serial_number=serial,
+                    product_id=product_id,
+                    variant_id=variant_id,
+                    location_id=location_id,
+                    status="damaged",
+                )
+                for serial in damaged
+            ]
+            serial_rows = [*accepted_rows, *damaged_rows]
             db.add_all(serial_rows)
             db.flush()
-            update_stock(
-                db,
-                product_id=product_id,
-                variant_id=variant_id,
-                location_id=location_id,
-                quantity_delta=len(serial_rows),
-                movement_type="receipt",
-                user_id=user_id,
-                username=username,
-                reference_type=reference_type,
-                reference_id=reference_id,
-                _allow_tracked=True,
-            )
+            if accepted_rows:
+                update_stock(
+                    db,
+                    product_id=product_id,
+                    variant_id=variant_id,
+                    location_id=location_id,
+                    quantity_delta=len(accepted_rows),
+                    movement_type="receipt",
+                    user_id=user_id,
+                    username=username,
+                    reference_type=reference_type,
+                    reference_id=reference_id,
+                    _allow_tracked=True,
+                )
             return tuple(row.id for row in serial_rows)
     except IntegrityError as exc:
         constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
         if constraint == "uq_serial_numbers_serial_number":
             raise ValueError("Duplicate serial number") from None
         raise
+
+
+def update_average_unit_cost(
+    db: Session,
+    *,
+    product_id: int,
+    variant_id: int | None,
+    quantity: int,
+    unit_price: Decimal,
+) -> Decimal:
+    """Apply a receipt's accepted quantity to the item's weighted average cost."""
+    if quantity <= 0 or unit_price < 0:
+        raise ValueError("Receipt quantity must be positive and unit price nonnegative.")
+
+    lock_product_for_stock(db, product_id)
+    with db.begin_nested():
+        db.execute(
+            insert(ItemCost)
+            .values(product_id=product_id, variant_id=variant_id, average_cost=None)
+            .on_conflict_do_nothing()
+        )
+        item_cost = db.scalar(
+            select(ItemCost)
+            .where(
+                ItemCost.product_id == product_id,
+                ItemCost.variant_id.is_not_distinct_from(variant_id),
+            )
+            .with_for_update()
+        )
+        if item_cost is None:
+            raise RuntimeError("Item cost row was not available after insert.")
+
+        quantity_after = int(
+            db.scalar(
+                select(func.coalesce(func.sum(StockLevel.quantity), 0)).where(
+                    StockLevel.product_id == product_id,
+                    StockLevel.variant_id.is_not_distinct_from(variant_id),
+                )
+            )
+        )
+        quantity_before = quantity_after - quantity
+        if quantity_before < 0:
+            raise RuntimeError("Receipt quantity exceeds updated stock.")
+        if item_cost.average_cost is None or quantity_before == 0:
+            average_cost = unit_price
+        else:
+            average_cost = (
+                item_cost.average_cost * quantity_before + unit_price * quantity
+            ) / quantity_after
+        item_cost.average_cost = average_cost.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        db.flush()
+        return item_cost.average_cost
 
 
 def consume_tracked_stock(
@@ -1129,6 +1196,16 @@ class StockService(Protocol):
         reference_id: int | None = None,
         record_audit: bool = True,
     ) -> StockUpdateResult: ...
+
+    def update_average_unit_cost(
+        self,
+        db: Session,
+        *,
+        product_id: int,
+        variant_id: int | None,
+        quantity: int,
+        unit_price: Decimal,
+    ) -> Decimal: ...
 
     def transfer(
         self,

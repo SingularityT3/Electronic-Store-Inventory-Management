@@ -157,6 +157,7 @@ class PurchaseOrderReceiptLine(Base):
     quantity_damaged: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     quantity_short: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     unit_price: Mapped[Decimal] = mapped_column(Money)
+    discrepancy_note: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         UniqueConstraint("receipt_id", "po_line_id"),
