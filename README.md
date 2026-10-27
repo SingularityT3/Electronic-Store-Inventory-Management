@@ -49,6 +49,10 @@ docker compose run --rm --no-deps frontend npm run build
 
 `ruff format .` and `npm run format` apply formatting.
 
+Every case in the test plan is mapped to its tests in
+[`backend/tests/TRACEABILITY.md`](backend/tests/TRACEABILITY.md); `tests/test_traceability.py` keeps
+that table in step with the plan and the test code.
+
 ## Deploy
 
 Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md).
