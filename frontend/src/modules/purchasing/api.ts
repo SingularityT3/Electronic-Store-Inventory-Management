@@ -28,6 +28,19 @@ export interface CatalogItemInput {
   supplier_price: string;
 }
 
+export interface SupplierPriceHistory {
+  id: number;
+  supplier_id: number;
+  supplier_name: string;
+  product_id: number;
+  product_name: string;
+  variant_id: number | null;
+  sku: string;
+  unit_price: string;
+  recorded_at: string;
+  receipt_line_id: number | null;
+}
+
 export interface PurchaseOrderLine {
   id: number;
   product_id: number;
@@ -93,6 +106,13 @@ export interface PurchaseOrderInput {
 export const purchasingApi = {
   suppliers: (activeOnly = false) =>
     api<Supplier[]>(`/purchasing/suppliers${activeOnly ? '?active_only=true' : ''}`),
+  supplierPriceHistory: (filters: { supplier_id?: number; product_id?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.supplier_id) params.set('supplier_id', String(filters.supplier_id));
+    if (filters.product_id) params.set('product_id', String(filters.product_id));
+    const query = params.size ? `?${params.toString()}` : '';
+    return api<SupplierPriceHistory[]>(`/purchasing/suppliers/price-history${query}`);
+  },
   createSupplier: (body: Omit<Supplier, 'id' | 'is_active'>) =>
     api<Supplier>('/purchasing/suppliers', { method: 'POST', body }),
   updateSupplier: (id: number, body: Partial<Omit<Supplier, 'id' | 'is_active'>>) =>

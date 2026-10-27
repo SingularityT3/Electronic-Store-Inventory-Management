@@ -17,7 +17,12 @@ import {
 } from './modules/product';
 import { PosPage } from './modules/sales';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
-import { POReceivingPage, PurchaseOrdersPage, SuppliersPage } from './modules/purchasing';
+import {
+  POReceivingPage,
+  PurchaseOrdersPage,
+  SupplierPriceHistoryPage,
+  SuppliersPage,
+} from './modules/purchasing';
 import { AppLayout, DashboardPage, NAV_ITEMS, NotFoundPage, PlaceholderPage } from './shell';
 import { RequirePermission } from './shell/components';
 
@@ -121,6 +126,8 @@ export default function App() {
               <CategoriesPage />
             ) : item.path === '/suppliers' ? (
               <SuppliersPage />
+            ) : item.path === '/suppliers/price-history' ? (
+              <SupplierPriceHistoryPage />
             ) : item.path === '/purchase-orders' ? (
               <PurchaseOrdersPage />
             ) : item.path === '/purchase-orders/receive' ? (

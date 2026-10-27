@@ -1,6 +1,7 @@
 """HTTP routes for the `purchasing` module."""
 
 import re
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -17,6 +18,7 @@ from app.modules.product import ProductStockItem, product_stock_items
 from app.modules.purchasing._internal.models import (
     PurchaseOrder,
     Supplier,
+    SupplierPriceHistory,
     SupplierProduct,
 )
 from app.modules.purchasing.purchase_orders import router as purchase_orders_router
@@ -107,6 +109,19 @@ class SupplierProductOut(BaseModel):
     supplier_price: Decimal
     product_name: str
     product_sku: str
+
+
+class SupplierPriceHistoryOut(BaseModel):
+    id: int
+    supplier_id: int
+    supplier_name: str
+    product_id: int
+    product_name: str
+    variant_id: int | None
+    sku: str
+    unit_price: Decimal
+    recorded_at: datetime
+    receipt_line_id: int | None
 
 
 def _validate_email(email: str | None) -> None:
@@ -237,6 +252,54 @@ def list_suppliers(
     if active_only:
         query = query.where(Supplier.is_active.is_(True))
     return [SupplierOut.model_validate(row, from_attributes=True) for row in db.scalars(query)]
+
+
+@router.get(
+    "/suppliers/price-history",
+    response_model=list[SupplierPriceHistoryOut],
+    dependencies=[Depends(require(Permission.SUPPLIERS_MANAGE))],
+)
+def list_supplier_price_history(
+    db: DbSession,
+    supplier_id: Annotated[int | None, Query(ge=1)] = None,
+    product_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[SupplierPriceHistoryOut]:
+    query = (
+        select(SupplierPriceHistory, Supplier.name)
+        .join(Supplier, Supplier.id == SupplierPriceHistory.supplier_id)
+        .order_by(SupplierPriceHistory.recorded_at, SupplierPriceHistory.id)
+    )
+    if supplier_id is not None:
+        query = query.where(SupplierPriceHistory.supplier_id == supplier_id)
+    if product_id is not None:
+        query = query.where(SupplierPriceHistory.product_id == product_id)
+    rows = db.execute(query).all()
+    items = {
+        (item.product_id, item.variant_id): item
+        for item in product_stock_items(
+            db, {history.product_id for history, _supplier_name in rows}
+        )
+    }
+    results = []
+    for history, supplier_name in rows:
+        item = items.get((history.product_id, history.variant_id))
+        if item is None:
+            raise RuntimeError(f"Missing product metadata for supplier price history {history.id}.")
+        results.append(
+            SupplierPriceHistoryOut(
+                id=history.id,
+                supplier_id=history.supplier_id,
+                supplier_name=supplier_name,
+                product_id=history.product_id,
+                product_name=item.product_name,
+                variant_id=history.variant_id,
+                sku=item.variant_sku or item.sku,
+                unit_price=history.unit_price,
+                recorded_at=history.recorded_at,
+                receipt_line_id=history.receipt_line_id,
+            )
+        )
+    return results
 
 
 @router.post(
