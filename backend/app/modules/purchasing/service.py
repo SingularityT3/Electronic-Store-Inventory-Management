@@ -11,7 +11,6 @@ from app.modules.notifications import record_purchase_order_status
 from app.modules.purchasing._internal.models import (
     PurchaseOrder,
     PurchaseOrderLine,
-    PurchaseOrderReceipt,
 )
 
 
@@ -47,13 +46,8 @@ def update_purchase_order_receipt_status(
     if not lines:
         raise ValueError("Purchase order has no lines.")
 
-    receipt_started = db.scalar(
-        select(PurchaseOrderReceipt.id)
-        .where(PurchaseOrderReceipt.purchase_order_id == purchase_order_id)
-        .limit(1)
-    )
     has_received_quantity = any(line.quantity_received > 0 for line in lines)
-    if receipt_started is None and not has_received_quantity:
+    if not has_received_quantity:
         return order.status
 
     new_status = (

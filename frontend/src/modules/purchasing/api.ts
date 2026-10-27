@@ -34,10 +34,29 @@ export interface PurchaseOrderLine {
   product_name: string;
   sku: string;
   variant_id: number | null;
+  tracking_mode: 'untracked' | 'batch' | 'serial';
   quantity_ordered: number;
   quantity_received: number;
+  quantity_outstanding: number;
   unit_price: string;
   line_total: string;
+}
+
+export interface PurchaseOrderReceiptLineInput {
+  po_line_id: number;
+  quantity_accepted: number;
+  quantity_damaged: number;
+  quantity_short: number;
+  unit_price: string;
+  discrepancy_note: string | null;
+  batch_number?: string;
+  serial_numbers?: string[];
+  damaged_serial_numbers?: string[];
+}
+
+export interface PurchaseOrderReceiptInput {
+  notes: string | null;
+  lines: PurchaseOrderReceiptLineInput[];
 }
 
 export interface PurchaseOrder {
@@ -95,6 +114,7 @@ export const purchasingApi = {
     api(`/purchasing/suppliers/${supplierId}/products/${entryId}`, { method: 'DELETE' }),
   purchaseOrders: () => api<PurchaseOrder[]>('/purchasing/purchase-orders'),
   pendingPurchaseOrders: () => api<PurchaseOrder[]>('/purchasing/purchase-orders/pending'),
+  receivablePurchaseOrders: () => api<PurchaseOrder[]>('/purchasing/purchase-orders/receivable'),
   purchaseOrder: (id: number) => api<PurchaseOrder>(`/purchasing/purchase-orders/${id}`),
   createPurchaseOrder: (body: PurchaseOrderInput) =>
     api<PurchaseOrder>('/purchasing/purchase-orders', { method: 'POST', body }),
@@ -104,4 +124,6 @@ export const purchasingApi = {
     api<PurchaseOrder>(`/purchasing/purchase-orders/${id}/submit`, { method: 'POST' }),
   cancelPurchaseOrder: (id: number) =>
     api<PurchaseOrder>(`/purchasing/purchase-orders/${id}/cancel`, { method: 'POST' }),
+  receivePurchaseOrder: (id: number, body: PurchaseOrderReceiptInput) =>
+    api<PurchaseOrder>(`/purchasing/purchase-orders/${id}/receive`, { method: 'POST', body }),
 };

@@ -31,6 +31,7 @@ from app.modules.stock.service import (
     serial_number_labels,
     stock_positions,
     transfer_stock,
+    update_average_unit_cost,
     update_stock,
 )
 
@@ -62,4 +63,5 @@ __all__ = [
     "serial_number_labels",
     "transfer_stock",
     "update_stock",
+    "update_average_unit_cost",
 ]

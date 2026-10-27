@@ -16,6 +16,7 @@ from app.modules.audit import audit_service
 from app.modules.auth import (
     CurrentUser,
     Permission,
+    authorize_location,
     po_status_notification_recipients,
     require,
 )
@@ -25,10 +26,21 @@ from app.modules.purchasing._internal.models import (
     PurchaseOrder,
     PurchaseOrderLine,
     PurchaseOrderReceipt,
+    PurchaseOrderReceiptLine,
+    PurchaseOrderReceiptSerial,
     Supplier,
+    SupplierPriceHistory,
     SupplierProduct,
 )
-from app.modules.stock import location_exists
+from app.modules.purchasing.service import update_purchase_order_receipt_status
+from app.modules.stock import (
+    InsufficientStockError,
+    location_exists,
+    receive_batch_stock,
+    receive_serial_stock,
+    update_average_unit_cost,
+    update_stock,
+)
 
 router = APIRouter(prefix="/purchase-orders", tags=["purchase orders"])
 DbSession = Annotated[Session, Depends(get_session)]
@@ -74,14 +86,54 @@ class PurchaseOrderUpdate(BaseModel):
         return self
 
 
+class PurchaseOrderReceiptLineInput(BaseModel):
+    po_line_id: int = Field(ge=1)
+    quantity_accepted: int = Field(default=0, ge=0)
+    quantity_damaged: int = Field(default=0, ge=0)
+    quantity_short: int = Field(default=0, ge=0)
+    unit_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    discrepancy_note: str | None = Field(default=None, max_length=2000)
+    batch_number: str | None = Field(default=None, max_length=100)
+    serial_numbers: list[str] = Field(default_factory=list)
+    damaged_serial_numbers: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_discrepancy(self) -> "PurchaseOrderReceiptLineInput":
+        if self.quantity_accepted + self.quantity_damaged + self.quantity_short == 0:
+            raise ValueError("Enter an accepted, damaged, or short quantity.")
+        if (self.quantity_damaged or self.quantity_short) and not (
+            self.discrepancy_note and self.discrepancy_note.strip()
+        ):
+            raise ValueError("A discrepancy note is required for damaged or short quantities.")
+        if self.batch_number is not None:
+            self.batch_number = self.batch_number.strip() or None
+        if self.discrepancy_note is not None:
+            self.discrepancy_note = self.discrepancy_note.strip() or None
+        return self
+
+
+class PurchaseOrderReceiptInput(BaseModel):
+    notes: str | None = None
+    lines: list[PurchaseOrderReceiptLineInput] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_po_lines(self) -> "PurchaseOrderReceiptInput":
+        line_ids = [line.po_line_id for line in self.lines]
+        if len(line_ids) != len(set(line_ids)):
+            raise ValueError("A purchase order line may appear only once per receipt.")
+        return self
+
+
 class PurchaseOrderLineOut(BaseModel):
     id: int
     product_id: int
     product_name: str
     sku: str
     variant_id: int | None
+    tracking_mode: Literal["untracked", "batch", "serial"]
     quantity_ordered: int
     quantity_received: int
+    quantity_outstanding: int
     unit_price: Decimal
     line_total: Decimal
 
@@ -155,7 +207,7 @@ def _validate_catalog_lines(
             )
 
 
-Labels = dict[tuple[int, int | None], tuple[str, str]]
+Labels = dict[tuple[int, int | None], tuple[str, str, Literal["untracked", "batch", "serial"]]]
 
 
 def _product_labels(db: Session, product_ids: set[int] | None = None) -> Labels:
@@ -163,21 +215,24 @@ def _product_labels(db: Session, product_ids: set[int] | None = None) -> Labels:
         (item.product_id, item.variant_id): (
             item.product_name,
             item.variant_sku or item.sku,
+            item.tracking_mode,
         )
         for item in product_stock_items(db, product_ids)
     }
 
 
 def _line_out(line: PurchaseOrderLine, labels: Labels) -> PurchaseOrderLineOut:
-    product_name, sku = labels[(line.product_id, line.variant_id)]
+    product_name, sku, tracking_mode = labels[(line.product_id, line.variant_id)]
     return PurchaseOrderLineOut(
         id=line.id,
         product_id=line.product_id,
         product_name=product_name,
         sku=sku,
         variant_id=line.variant_id,
+        tracking_mode=tracking_mode,
         quantity_ordered=line.quantity_ordered,
         quantity_received=line.quantity_received,
+        quantity_outstanding=line.quantity_ordered - line.quantity_received,
         unit_price=line.unit_price,
         line_total=line.unit_price * line.quantity_ordered,
     )
@@ -317,6 +372,24 @@ def pending_purchase_orders(
     return [_out(db, order, labels) for order in db.scalars(query)]
 
 
+@router.get("/receivable", response_model=list[PurchaseOrderOut])
+def receivable_purchase_orders(
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PURCHASE_ORDERS_RECEIVE))],
+) -> list[PurchaseOrderOut]:
+    query = (
+        select(PurchaseOrder)
+        .where(PurchaseOrder.status.in_(("submitted", "partially_received")))
+        .order_by(PurchaseOrder.created_at.desc(), PurchaseOrder.id.desc())
+    )
+    if not user.sees_all_locations:
+        if user.location_id is None:
+            return []
+        query = query.where(PurchaseOrder.location_id == user.location_id)
+    labels = _product_labels(db)
+    return [_out(db, order, labels) for order in db.scalars(query)]
+
+
 @router.post("", response_model=PurchaseOrderOut, status_code=status.HTTP_201_CREATED)
 def create_purchase_order(
     body: PurchaseOrderCreate,
@@ -383,6 +456,218 @@ def get_purchase_order(
     _user: Annotated[CurrentUser, Depends(require(Permission.PURCHASE_ORDERS_MANAGE))],
 ) -> PurchaseOrderOut:
     return _out(db, _order_or_404(db, order_id))
+
+
+@router.post("/{order_id}/receive", response_model=PurchaseOrderOut)
+def receive_purchase_order(
+    order_id: int,
+    body: PurchaseOrderReceiptInput,
+    db: DbSession,
+    user: Annotated[CurrentUser, Depends(require(Permission.PURCHASE_ORDERS_RECEIVE))],
+) -> PurchaseOrderOut:
+    order = _order_or_404(db, order_id, lock=True)
+    if order.status not in {"submitted", "partially_received"}:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Purchase order is not open for receiving.")
+    authorize_location(db, user, order.location_id, "receive purchase order")
+
+    po_lines = db.scalars(
+        select(PurchaseOrderLine)
+        .where(PurchaseOrderLine.purchase_order_id == order.id)
+        .order_by(PurchaseOrderLine.id)
+        .with_for_update()
+    ).all()
+    po_lines_by_id = {line.id: line for line in po_lines}
+    for receipt_line in body.lines:
+        po_line = po_lines_by_id.get(receipt_line.po_line_id)
+        if po_line is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Purchase order line not found.")
+        outstanding = po_line.quantity_ordered - po_line.quantity_received
+        reported_quantity = (
+            receipt_line.quantity_accepted
+            + receipt_line.quantity_damaged
+            + receipt_line.quantity_short
+        )
+        if reported_quantity > outstanding:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Received quantity exceeds outstanding order quantity",
+            )
+
+    items = {
+        (item.product_id, item.variant_id): item
+        for item in product_stock_items(db, {line.product_id for line in po_lines})
+    }
+    for receipt_line in body.lines:
+        po_line = po_lines_by_id[receipt_line.po_line_id]
+        item = items.get((po_line.product_id, po_line.variant_id))
+        if item is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Product or variant not found.")
+        if receipt_line.quantity_accepted and item.tracking_mode == "batch":
+            if not receipt_line.batch_number:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Batch number is required for batch-tracked items.",
+                )
+        elif receipt_line.batch_number:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Batch number is only valid for batch-tracked items.",
+            )
+        if item.tracking_mode == "serial":
+            if len(receipt_line.serial_numbers) != receipt_line.quantity_accepted:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Provide one serial number for each accepted unit.",
+                )
+            if len(receipt_line.damaged_serial_numbers) != receipt_line.quantity_damaged:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "Provide one serial number for each damaged unit.",
+                )
+        elif receipt_line.serial_numbers or receipt_line.damaged_serial_numbers:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Serial numbers are only valid for serial-tracked items.",
+            )
+
+    previous_status = order.status
+    try:
+        with db.begin_nested():
+            receipt = PurchaseOrderReceipt(
+                purchase_order_id=order.id,
+                received_by=user.id,
+                notes=body.notes.strip() if body.notes and body.notes.strip() else None,
+            )
+            db.add(receipt)
+            db.flush()
+            receipt_audit_lines = []
+
+            for input_line in body.lines:
+                po_line = po_lines_by_id[input_line.po_line_id]
+                item = items[(po_line.product_id, po_line.variant_id)]
+                unit_price = (
+                    input_line.unit_price
+                    if input_line.unit_price is not None
+                    else po_line.unit_price
+                )
+                receipt_line = PurchaseOrderReceiptLine(
+                    receipt_id=receipt.id,
+                    po_line_id=po_line.id,
+                    quantity_accepted=input_line.quantity_accepted,
+                    quantity_damaged=input_line.quantity_damaged,
+                    quantity_short=input_line.quantity_short,
+                    unit_price=unit_price,
+                    discrepancy_note=input_line.discrepancy_note,
+                )
+                db.add(receipt_line)
+                db.flush()
+                po_line.quantity_received += (
+                    input_line.quantity_accepted + input_line.quantity_damaged
+                )
+                if input_line.quantity_accepted + input_line.quantity_damaged:
+                    db.add(
+                        SupplierPriceHistory(
+                            supplier_id=order.supplier_id,
+                            product_id=po_line.product_id,
+                            variant_id=po_line.variant_id,
+                            unit_price=unit_price,
+                            receipt_line_id=receipt_line.id,
+                        )
+                    )
+
+                if item.tracking_mode == "batch" and input_line.quantity_accepted:
+                    receive_batch_stock(
+                        db,
+                        product_id=po_line.product_id,
+                        variant_id=po_line.variant_id,
+                        location_id=order.location_id,
+                        batch_number=input_line.batch_number or "",
+                        quantity=input_line.quantity_accepted,
+                        user_id=user.id,
+                        username=user.username,
+                        reference_type="po_receipt_line",
+                        reference_id=receipt_line.id,
+                    )
+                elif item.tracking_mode == "serial" and (
+                    input_line.quantity_accepted or input_line.quantity_damaged
+                ):
+                    serial_ids = receive_serial_stock(
+                        db,
+                        product_id=po_line.product_id,
+                        variant_id=po_line.variant_id,
+                        location_id=order.location_id,
+                        serial_numbers=input_line.serial_numbers,
+                        damaged_serial_numbers=input_line.damaged_serial_numbers,
+                        user_id=user.id,
+                        username=user.username,
+                        reference_type="po_receipt_line",
+                        reference_id=receipt_line.id,
+                    )
+                    db.add_all(
+                        PurchaseOrderReceiptSerial(
+                            receipt_line_id=receipt_line.id,
+                            serial_number_id=serial_id,
+                        )
+                        for serial_id in serial_ids
+                    )
+                elif item.tracking_mode == "untracked" and input_line.quantity_accepted:
+                    update_stock(
+                        db,
+                        product_id=po_line.product_id,
+                        variant_id=po_line.variant_id,
+                        location_id=order.location_id,
+                        quantity_delta=input_line.quantity_accepted,
+                        movement_type="receipt",
+                        user_id=user.id,
+                        username=user.username,
+                        reference_type="po_receipt_line",
+                        reference_id=receipt_line.id,
+                    )
+
+                if input_line.quantity_accepted:
+                    update_average_unit_cost(
+                        db,
+                        product_id=po_line.product_id,
+                        variant_id=po_line.variant_id,
+                        quantity=input_line.quantity_accepted,
+                        unit_price=unit_price,
+                    )
+                receipt_audit_lines.append(
+                    {
+                        "po_line_id": po_line.id,
+                        "quantity_accepted": input_line.quantity_accepted,
+                        "quantity_damaged": input_line.quantity_damaged,
+                        "quantity_short": input_line.quantity_short,
+                        "unit_price": str(unit_price),
+                        "discrepancy_note": input_line.discrepancy_note,
+                    }
+                )
+
+            db.flush()
+            _record_order_change(
+                db,
+                order,
+                user,
+                "purchase_order_receipt_recorded",
+                {"status": previous_status},
+                {"receipt_id": receipt.id, "lines": receipt_audit_lines},
+            )
+            update_purchase_order_receipt_status(
+                db,
+                purchase_order_id=order.id,
+                actor_id=user.id,
+                actor_username=user.username,
+            )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except InsufficientStockError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+    _commit(db)
+    db.refresh(order)
+    return _out(db, order)
 
 
 @router.patch("/{order_id}", response_model=PurchaseOrderOut)
