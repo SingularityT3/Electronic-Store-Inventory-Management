@@ -22,7 +22,7 @@ from app.db import database_url, get_session
 from app.main import app
 from app.modules.auth._internal.models import User
 from app.modules.auth._internal.passwords import hash_password
-from tests.helpers import PASSWORD, SETTINGS
+from tests.helpers import PASSWORD, SETTINGS, CsrfClient
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
@@ -90,9 +90,15 @@ def client(db: Session) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = lambda: db
     app.dependency_overrides[get_settings] = lambda: SETTINGS
     try:
-        yield TestClient(app)
+        yield CsrfClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def plain_client(client: TestClient) -> TestClient:
+    """A client that, like a page on another site, never sends the CSRF header."""
+    return TestClient(client.app)
 
 
 @pytest.fixture

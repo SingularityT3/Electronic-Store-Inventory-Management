@@ -13,16 +13,28 @@ export class ApiError extends Error {
 /** Fired when a request is rejected because the session is missing or expired. */
 export const SESSION_EXPIRED_EVENT = 'esims:session-expired';
 
+/** Value of the CSRF cookie set at login, echoed in a header on state-changing requests. */
+function csrfToken(): string {
+  const match = document.cookie.match(/(?:^|; )esims_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
 export async function api<T = void>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   const body = options.body;
   const isFormData = body instanceof FormData;
+  const method = options.method ?? (body === undefined ? 'GET' : 'POST');
+  const headers: Record<string, string> = {};
+  if (body !== undefined && !isFormData) headers['Content-Type'] = 'application/json';
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
+    headers['X-CSRF-Token'] = csrfToken();
+  }
   const response = await fetch(`/api${path}`, {
-    method: options.method ?? (body === undefined ? 'GET' : 'POST'),
+    method,
     credentials: 'same-origin',
-    headers: body === undefined || isFormData ? undefined : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
   if (!response.ok) {
