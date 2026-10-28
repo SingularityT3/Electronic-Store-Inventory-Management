@@ -1,9 +1,8 @@
 """Admin user account management (FR-5.1, UC-02)."""
 
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from tests.helpers import PASSWORD, login
+from tests.helpers import PASSWORD, CsrfClient, login
 
 
 def admin_client(client, make_user):
@@ -111,7 +110,7 @@ def test_role_change_applies_on_the_next_request(client, make_user, db):
         "staff_user", role="staff", location_id=location_id, email="staff@example.com"
     )
     admin = admin_client(client, make_user)
-    target_client = TestClient(client.app)
+    target_client = CsrfClient(client.app)
     assert login(target_client, "staff_user").status_code == 200
     assert target_client.get("/api/stock/locations").status_code == 200
     target.role = "cashier"
@@ -135,7 +134,7 @@ def test_non_admin_cannot_call_management_endpoints(client, make_user):
 
 def test_deactivation_revokes_session_and_blocks_login(client, make_user, db):
     target = make_user("manager_user", role="manager", email="manager@example.com")
-    target_client = TestClient(client.app)
+    target_client = CsrfClient(client.app)
     assert login(target_client, "manager_user").status_code == 200
     admin = admin_client(client, make_user)
     response = admin.post(f"/api/auth/users/{target.id}/deactivate")
@@ -170,7 +169,7 @@ def test_disabled_admin_can_be_edited_while_one_admin_is_active(client, make_use
 
 def test_admin_unlocks_a_locked_account(client, make_user, db):
     target = make_user("manager_locked", role="manager", email="locked@example.com")
-    target_client = TestClient(client.app)
+    target_client = CsrfClient(client.app)
     for _ in range(5):
         assert login(target_client, "manager_locked", "wrong-password").status_code == 401
     assert login(target_client, "manager_locked").status_code == 423

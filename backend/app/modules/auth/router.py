@@ -20,6 +20,11 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service
+from app.modules.auth._internal.csrf import (
+    CSRF_COOKIE,
+    clear_csrf_cookie,
+    set_csrf_cookie,
+)
 from app.modules.auth._internal.dependencies import utcnow
 from app.modules.auth._internal.login import LoginStatus, authenticate
 from app.modules.auth._internal.mail import send_reset_email
@@ -268,6 +273,7 @@ def login(
         samesite="strict",
         path="/",
     )
+    set_csrf_cookie(response, settings.cookie_secure)
     return _user_out(outcome.user)
 
 
@@ -290,10 +296,19 @@ def logout(request: Request, response: Response, db: DbSession) -> None:
             )
         db.commit()
     response.delete_cookie(SESSION_COOKIE, path="/")
+    clear_csrf_cookie(response)
 
 
 @router.get("/me", responses={401: {"model": Message}})
-def me(user: Annotated[CurrentUser, Depends(signed_in)]) -> UserOut:
+def me(
+    request: Request,
+    response: Response,
+    user: Annotated[CurrentUser, Depends(signed_in)],
+    settings: AppSettings,
+) -> UserOut:
+    # Sessions that began before CSRF tokens existed get one here.
+    if CSRF_COOKIE not in request.cookies:
+        set_csrf_cookie(response, settings.cookie_secure)
     return _user_out(user)
 
 

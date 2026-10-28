@@ -299,7 +299,7 @@ Totals: 226 cases, 129 automated, 13 partial, 1 manual, 83 pending.
 | SEC-INP-2-IT-2 | Automated | `test_plan_cases.py::test_sec_inp_2_it_2_filter_and_sort_parameters_are_not_injectable` |  |
 | SEC-INP-3-IT-1 | Partial | `test_plan_cases.py::test_sec_inp_3_it_1_script_in_product_name_is_returned_as_data` | The API returns the name as JSON text; the screen tests do not yet render a script name |
 | SEC-INP-3-ST-1 | Automated | `fe:modules/audit/audit.test.tsx::logged text is shown as text, not markup` |  |
-| SEC-SES-4-IT-1 | Pending |  | CSRF tokens are not implemented (#41) |
-| SEC-SES-4-IT-2 | Pending |  | CSRF tokens are not implemented (#41) |
-| SEC-DAT-6-ST-1 | Partial | `test_plan_cases.py::test_sec_dat_6_st_1_no_credentials_in_source` | Scans the backend sources; a repository-wide secret scan in CI is not set up |
+| SEC-SES-4-IT-1 | Automated | `test_csrf.py::test_sec_ses_4_it_1_request_without_token_is_rejected` |  |
+| SEC-SES-4-IT-2 | Automated | `test_csrf.py::test_sec_ses_4_it_2_request_with_token_succeeds` ; `fe:api.test.ts` |  |
+| SEC-DAT-6-ST-1 | Partial | `test_plan_cases.py::test_sec_dat_6_st_1_no_credentials_in_source` | Scans the backend sources; CI also runs gitleaks over the full history (`secret-scan` job) |
 | SEC-DAT-6-ST-2 | Automated | `test_plan_cases.py::test_sec_dat_6_st_2_secrets_come_from_the_environment` |  |

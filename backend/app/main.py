@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, FastAPI, Request, Response
 
 from app.api import health
 from app.modules.audit.router import router as audit_router
-from app.modules.auth import Permission, current_user, ensure_routes_authorized, require
+from app.modules.auth import (
+    Permission,
+    csrf_protect_except,
+    current_user,
+    ensure_routes_authorized,
+    require,
+)
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.router import set_location_validator
 from app.modules.notifications.router import router as notifications_router
@@ -79,7 +85,8 @@ def create_app() -> FastAPI:
     set_location_validator(location_exists)
     app.middleware("http")(no_store)
     app.middleware("http")(log_requests)
-    api = APIRouter(prefix="/api")
+    # Unsafe requests need a matching CSRF header and cookie (SEC-SES-4).
+    api = APIRouter(prefix="/api", dependencies=[Depends(csrf_protect_except(PUBLIC_PATHS))])
     # Public: health check, and the auth routes (each protects itself as needed).
     api.include_router(health.router)
     api.include_router(auth_router)
