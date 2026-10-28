@@ -56,9 +56,11 @@ function signedInAs(role: Role) {
     Promise.resolve({ ok: status < 400, status, json: async () => body });
   vi.stubGlobal(
     'fetch',
-    vi.fn((url: string) =>
-      url === '/api/auth/me' ? reply(200, userWithRole(role)) : reply(404, { detail: 'Not found' }),
-    ),
+    vi.fn((url: string) => {
+      if (url === '/api/auth/me') return reply(200, userWithRole(role));
+      if (url === '/api/notifications') return reply(200, []);
+      return reply(404, { detail: 'Not found' });
+    }),
   );
 }
 
@@ -147,6 +149,67 @@ test('the shell has a header, a menu and a content area', async () => {
   expect(screen.getByRole('banner')).toHaveTextContent('ESIMS');
   expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeInTheDocument();
   expect(screen.getByRole('main')).toBeInTheDocument();
+});
+
+test('the notification panel displays PO updates in chronological order with timestamps', async () => {
+  const notifications = [
+    {
+      id: 1,
+      type: 'po_status',
+      title: 'Purchase order status changed',
+      message: 'PO-3010: Submitted',
+      is_read: false,
+      created_at: '2026-10-28T09:00:00Z',
+    },
+    {
+      id: 2,
+      type: 'po_status',
+      title: 'Purchase order status changed',
+      message: 'PO-3010: Partially Received',
+      is_read: false,
+      created_at: '2026-10-28T10:00:00Z',
+    },
+    {
+      id: 3,
+      type: 'po_status',
+      title: 'Purchase order status changed',
+      message: 'PO-3010: Received',
+      is_read: false,
+      created_at: '2026-10-28T11:00:00Z',
+    },
+  ];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url === '/api/auth/me') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => userWithRole('manager'),
+        });
+      }
+      if (url === '/api/notifications') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => notifications });
+      }
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({ detail: 'Not found' }),
+      });
+    }),
+  );
+  renderAt('/');
+  await userEvent.click(await screen.findByRole('button', { name: 'Notifications' }));
+  const list = await screen.findByRole('list', { name: 'Notification history' });
+  const messages = within(list)
+    .getAllByText(/PO-3010:/)
+    .map((item) => item.textContent);
+  expect(messages).toEqual([
+    'PO-3010: Submitted',
+    'PO-3010: Partially Received',
+    'PO-3010: Received',
+  ]);
+  expect(within(list).getAllByRole('time')).toHaveLength(3);
 });
 
 test('the current screen is marked in the menu', async () => {
@@ -238,7 +301,7 @@ test.each([
   expect(Boolean(bell)).toBe(shown);
 });
 
-test('the notification bell opens an empty placeholder panel', async () => {
+test('the notification bell opens an empty notifications panel', async () => {
   signedInAs('manager');
   renderAt('/');
   await userEvent.click(await screen.findByRole('button', { name: 'Notifications' }));

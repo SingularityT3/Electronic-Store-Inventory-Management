@@ -1,12 +1,13 @@
 """Stock alert API and threshold reevaluation."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import select
 
 from app.modules.audit._internal.models import AuditLog
-from app.modules.notifications._internal.models import StockAlert
+from app.modules.notifications._internal.models import Notification, StockAlert
 from app.modules.product._internal.models import Category, Product
 from app.modules.reporting.service import reorder_rows
 from app.modules.stock import reevaluate_stock_alert, update_stock
@@ -155,3 +156,83 @@ def test_threshold_above_saved_reorder_to_level_is_a_validation_error(client, ma
     assert response.status_code == 200, response.text
     actions = db.scalars(select(AuditLog.action)).all()
     assert "reorder_settings_updated" in actions
+
+
+def test_notification_feed_is_recipient_scoped_and_chronological(client, make_user, db):
+    manager = make_user("notification_feed_manager", role="manager")
+    other_manager = make_user("notification_feed_other", role="manager")
+    now = datetime.now(UTC)
+    db.add_all(
+        [
+            Notification(
+                recipient_user_id=manager.id,
+                type="po_status",
+                title="Purchase order status changed",
+                message="PO-3010: Received",
+                location_id=None,
+                reference_type="purchase_order",
+                reference_id=3010,
+                created_at=now,
+            ),
+            Notification(
+                recipient_user_id=manager.id,
+                type="po_status",
+                title="Purchase order status changed",
+                message="PO-3010: Submitted",
+                location_id=None,
+                reference_type="purchase_order",
+                reference_id=3010,
+                created_at=now - timedelta(minutes=5),
+            ),
+            Notification(
+                recipient_user_id=other_manager.id,
+                type="po_status",
+                title="Purchase order status changed",
+                message="PO-9999: Received",
+                location_id=None,
+                reference_type="purchase_order",
+                reference_id=9999,
+                created_at=now - timedelta(minutes=10),
+            ),
+        ]
+    )
+    db.commit()
+    assert login(client, manager.username).status_code == 200
+
+    response = client.get("/api/notifications")
+
+    assert response.status_code == 200
+    assert [row["message"] for row in response.json()] == [
+        "PO-3010: Submitted",
+        "PO-3010: Received",
+    ]
+    timestamps = [
+        datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) for row in response.json()
+    ]
+    assert timestamps == sorted(timestamps)
+    assert all(row["created_at"] for row in response.json())
+
+
+def test_notification_feed_respects_role_permissions(client, make_user, db):
+    staff = make_user("notification_feed_staff", role="staff", location_id=1)
+    db.add(
+        Notification(
+            recipient_user_id=staff.id,
+            type="po_status",
+            title="Purchase order status changed",
+            message="PO-3010: Submitted",
+            location_id=None,
+            reference_type="purchase_order",
+            reference_id=3010,
+        )
+    )
+    db.commit()
+    assert login(client, staff.username).status_code == 200
+    staff_response = client.get("/api/notifications")
+    assert staff_response.status_code == 200
+    assert staff_response.json()[0]["message"] == "PO-3010: Submitted"
+
+    client.post("/api/auth/logout")
+    cashier = make_user("notification_feed_cashier", role="cashier", location_id=1)
+    assert login(client, cashier.username).status_code == 200
+    assert client.get("/api/notifications").status_code == 403

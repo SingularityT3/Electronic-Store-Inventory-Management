@@ -243,6 +243,12 @@ def test_purchase_order_accepts_supplier_catalog_variant(client, make_user, db):
 def test_cancelled_orders_are_excluded_from_pending_orders(client, make_user, db):
     _, creator = signed_in(client, make_user, "manager")
     supplier, location, product = create_fixture_data(db)
+    admin = make_user("po_cancel_notification_admin", role="admin")
+    inactive_admin = make_user(
+        "po_cancel_notification_inactive_admin", role="admin", is_active=False
+    )
+    staff = make_user("po_cancel_notification_staff", role="staff", location_id=location.id)
+    cashier = make_user("po_cancel_notification_cashier", role="cashier", location_id=location.id)
     payload = create_payload(supplier, location, product)
     created = client.post("/api/purchasing/purchase-orders", json=payload).json()
     cancelled = client.post(f"/api/purchasing/purchase-orders/{created['id']}/cancel")
@@ -263,12 +269,37 @@ def test_cancelled_orders_are_excluded_from_pending_orders(client, make_user, db
     )
     assert notification is not None
     assert notification.message == f"{created['po_number']}: Cancelled"
+    recipients = set(
+        db.scalars(
+            select(Notification.recipient_user_id).where(Notification.reference_id == created["id"])
+        )
+    )
+    assert recipients == {creator.id, admin.id}
+    assert staff.id not in recipients
+    assert cashier.id not in recipients
+    assert inactive_admin.id not in recipients
+    admin_notification = db.scalar(
+        select(Notification).where(
+            Notification.recipient_user_id == admin.id,
+            Notification.reference_id == created["id"],
+        )
+    )
+    assert admin_notification is not None
+    assert admin_notification.message == f"{created['po_number']}: Cancelled"
     assert client.post(f"/api/purchasing/purchase-orders/{created['id']}/cancel").status_code == 409
 
 
 def test_receipt_hook_advances_lifecycle_notifies_and_freezes_lines(client, make_user, db):
     username, creator = signed_in(client, make_user, "manager")
     supplier, location, product = create_fixture_data(db)
+    admin = make_user("po_lifecycle_notification_admin", role="admin")
+    inactive_admin = make_user(
+        "po_lifecycle_notification_inactive_admin", role="admin", is_active=False
+    )
+    staff = make_user("po_lifecycle_notification_staff", role="staff", location_id=location.id)
+    cashier = make_user(
+        "po_lifecycle_notification_cashier", role="cashier", location_id=location.id
+    )
     created = client.post(
         "/api/purchasing/purchase-orders",
         json=create_payload(supplier, location, product),
@@ -328,6 +359,25 @@ def test_receipt_hook_advances_lifecycle_notifies_and_freezes_lines(client, make
         .order_by(Notification.id)
     ).all()
     assert events == [
+        f"{order.po_number}: Submitted",
+        f"{order.po_number}: Partially Received",
+        f"{order.po_number}: Received",
+    ]
+    recipient_ids = set(
+        db.scalars(
+            select(Notification.recipient_user_id).where(Notification.reference_id == order.id)
+        )
+    )
+    assert recipient_ids == {creator.id, admin.id}
+    assert staff.id not in recipient_ids
+    assert cashier.id not in recipient_ids
+    assert inactive_admin.id not in recipient_ids
+    admin_events = db.scalars(
+        select(Notification.message)
+        .where(Notification.reference_id == order.id, Notification.recipient_user_id == admin.id)
+        .order_by(Notification.id)
+    ).all()
+    assert admin_events == [
         f"{order.po_number}: Submitted",
         f"{order.po_number}: Partially Received",
         f"{order.po_number}: Received",
