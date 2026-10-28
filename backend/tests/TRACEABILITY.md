@@ -200,14 +200,14 @@ Totals: 226 cases, 129 automated, 13 partial, 1 manual, 83 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
-| FR6.1-UT-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` |  |
-| FR6.1-UT-2 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` |  |
+| FR6.1-UT-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_valuation_uses_average_cost_then_active_supplier_catalog_price` |  |
+| FR6.1-UT-2 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_valuation_uses_average_cost_then_active_supplier_catalog_price` |  |
 | FR6.1-UT-3 | Automated | `test_plan_cases.py::test_fr6_1_ut_3_zero_stock_adds_no_value` |  |
 | FR6.1-IT-1 | Automated | `test_plan_cases.py::test_fr2_4_it_2_adjustment_is_in_the_valuation_report` |  |
 | FR6.1-IT-2 | Pending |  | CSV and PDF export is #34 |
 | FR6.1-IT-3 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` |  |
-| FR6.1-ST-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` |  |
-| FR6.1-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
+| FR6.1-ST-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_valuation` |  |
+| FR6.1-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_valuation` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
 | FR6.2-UT-1 | Pending |  | Sales trend report is #31 |
 | FR6.2-UT-2 | Pending |  | Sales trend report is #31 |
 | FR6.2-UT-3 | Pending |  | Sales trend report is #31 |

@@ -162,7 +162,7 @@ def test_fr6_1_ut_3_zero_stock_adds_no_value(db):
     rows, total = valuation_rows(db, location_id=location.id)
 
     assert total == Decimal("100")
-    assert all(value == 0 for position, value in rows if position.quantity == 0)
+    assert all(row.value == 0 for row in rows if row.position.quantity == 0)
 
 
 def test_sec_inp_2_it_1_search_is_not_injectable(client, db, make_user):

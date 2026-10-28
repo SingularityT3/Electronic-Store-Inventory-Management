@@ -16,6 +16,7 @@ import {
   ProductViewPage,
 } from './modules/product';
 import { PosPage } from './modules/sales';
+import { StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import {
   POReceivingPage,
@@ -132,6 +133,8 @@ export default function App() {
               <PurchaseOrdersPage />
             ) : item.path === '/purchase-orders/receive' ? (
               <POReceivingPage />
+            ) : item.path === '/reports' ? (
+              <StockValuationPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );
