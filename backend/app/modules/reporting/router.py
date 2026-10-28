@@ -21,6 +21,7 @@ class ValuationItemOut(BaseModel):
     sku: str
     variant_id: int | None
     variant_sku: str | None
+    variant_attributes: dict[str, object] | None
     location_id: int
     location_name: str
     quantity: int
@@ -62,8 +63,8 @@ def stock_valuation(
 
     rows, total = valuation_rows(db, location_id=location_id)
     items = []
-    for position, value in rows:
-        unit_cost = position.average_cost or Decimal(0)
+    for row in rows:
+        position = row.position
         items.append(
             ValuationItemOut(
                 product_id=position.product_id,
@@ -71,12 +72,13 @@ def stock_valuation(
                 sku=position.sku,
                 variant_id=position.variant_id,
                 variant_sku=position.variant_sku,
+                variant_attributes=position.variant_attributes,
                 location_id=position.location_id,
                 location_name=position.location_name,
                 quantity=position.quantity,
-                unit_cost=unit_cost,
-                value=value,
-                cost_not_set=position.average_cost is None,
+                unit_cost=row.unit_cost,
+                value=row.value,
+                cost_not_set=row.cost_not_set,
             )
         )
     return ValuationOut(items=items, total_value=total)
