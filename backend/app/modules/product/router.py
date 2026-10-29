@@ -17,7 +17,7 @@ from app.config import Settings, get_settings
 from app.db import get_session
 from app.modules.audit import audit_service, changes
 from app.modules.auth import CurrentUser, Permission, require
-from app.modules.notifications import active_stock_alerts, resolve_stock_alerts
+from app.modules.notifications import alerted_product_ids, resolve_stock_alerts
 from app.modules.product._internal.models import (
     Category,
     CategoryAttribute,
@@ -1049,12 +1049,9 @@ def list_products(
     in_python = sort == "stock" or stock_status is not None
     paging = "" if in_python else "OFFSET :offset LIMIT :limit"
     params.update(offset=(page - 1) * page_size, limit=page_size)
-    rows = list(
-        db.execute(
-            text(
-                f"""
-                WITH RECURSIVE {", ".join(ctes)}
-                SELECT p.id, p.name, p.sku, p.category_id, c.name AS category_name,
+
+    def full_columns(rank: str) -> str:
+        return f"""p.id, p.name, p.sku, p.category_id, c.name AS category_name,
                        tree.id_path, tree.name_path, p.brand, p.price,
                        p.description, p.tracking_mode, p.is_active,
                        (
@@ -1062,17 +1059,36 @@ def list_products(
                          WHERE v.product_id = p.id AND v.is_active
                        )::int AS variant_count,
                        count(*) OVER() AS total,
-                       {rank} AS rank
-                FROM products p
-                JOIN categories c ON c.id = p.category_id
-                JOIN tree ON tree.id = p.category_id
-                WHERE {" AND ".join(conditions)}
-                ORDER BY {order_by}
-                {paging}
-                """
-            ),
-            params,
-        ).mappings()
+                       {rank} AS rank"""
+
+    def fetch(columns: str, where: str, ctes: list[str], order_by: str, paging: str, params):
+        return list(
+            db.execute(
+                text(
+                    f"""
+                    WITH RECURSIVE {", ".join(ctes)}
+                    SELECT {columns}
+                    FROM products p
+                    JOIN categories c ON c.id = p.category_id
+                    JOIN tree ON tree.id = p.category_id
+                    WHERE {where}
+                    ORDER BY {order_by}
+                    {paging}
+                    """
+                ),
+                params,
+            ).mappings()
+        )
+
+    # Sorting or filtering on stock happens below, over every match. Only ids are read for that,
+    # then the page's rows are loaded, so a 10,000-SKU catalogue is not materialised (NFR-1).
+    rows = fetch(
+        f"p.id, count(*) OVER() AS total, {rank} AS rank" if in_python else full_columns(rank),
+        " AND ".join(conditions),
+        ctes,
+        order_by,
+        paging,
+        params,
     )
     total = rows[0]["total"] if rows else 0
     product_ids = [row["id"] for row in rows]
@@ -1086,12 +1102,9 @@ def list_products(
     }
     if in_python:
         if stock_status is not None:
-            alerted = {
-                alert.product_id
-                for alert in active_stock_alerts(
-                    db, location_id=None if user.sees_all_locations else user.location_id
-                )
-            }
+            alerted = alerted_product_ids(
+                db, location_id=None if user.sees_all_locations else user.location_id
+            )
             rows = [
                 row
                 for row in rows
@@ -1101,7 +1114,17 @@ def list_products(
             # Stable sorts: by stock, then the SQL order (name, id) breaks ties.
             rows.sort(key=lambda row: stock[row["id"]], reverse=order == "desc")
         total = len(rows)
-        rows = rows[(page - 1) * page_size : page * page_size]
+        page_ids = [row["id"] for row in rows[(page - 1) * page_size : page * page_size]]
+        position = {product_id: index for index, product_id in enumerate(page_ids)}
+        rows = fetch(
+            full_columns("0"),
+            "p.id = ANY(:page_ids)",
+            ctes[:1],
+            "p.id",
+            "",
+            {"page_ids": page_ids},
+        )
+        rows.sort(key=lambda row: position[row["id"]])
 
     items = [
         ProductOut(

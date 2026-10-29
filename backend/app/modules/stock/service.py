@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Protocol
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import any_, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -1236,7 +1236,8 @@ def stock_quantities(
     ids = [product_ids] if isinstance(product_ids, int) else list(product_ids)
     if not ids:
         return {}
-    stock_filter = [StockLevel.product_id.in_(ids)]
+    # One array parameter, not one per id: sorting by stock looks up every product at once.
+    stock_filter = [StockLevel.product_id == any_(ids)]
     if not all_locations:
         stock_filter.append(StockLevel.location_id == location_id)
     rows = db.execute(

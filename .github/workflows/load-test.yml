@@ -1,0 +1,20 @@
+name: Load test
+
+on:
+  schedule:
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose build backend
+      - run: docker compose run --rm backend python -m scripts.loadtest --output /app/loadtest-results.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loadtest-results
+          path: backend/loadtest-results.md
