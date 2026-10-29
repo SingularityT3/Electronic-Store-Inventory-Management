@@ -168,8 +168,9 @@ its path in `App.tsx`. A new menu item is one entry in `NAV_ITEMS`.
 
 ## Sales transaction recording
 
-The sales module exposes `POST /api/sales` for the cashier POS and
-`GET /api/sales/{id}` for receipt data. Checkout validates live catalog prices and active
+The sales module exposes `POST /api/sales` for the cashier POS, `GET /api/sales/{id}` for receipt data,
+`GET /api/sales/by-invoice/{invoice_number}` for invoice lookup, `POST /api/sales/returns` for processing
+returns, and `GET /api/sales/returns/{return_id}` for credit note data. Checkout validates live catalog prices and active
 variants, merges duplicate items, sorts them by `(product_id, variant_id)`, and calls the stock
 module's row-locked `update_stock` operation in one database transaction. The sale, stock
 movements, payments, invoice and one `sale_recorded` audit entry commit together or roll back
@@ -180,8 +181,36 @@ GST is configured by `GST_RATE` (18% by default) and is applied after each line 
 are rounded half up to two decimals per line and totals are sums of stored line values. A discount
 is either a fixed amount or a percentage from 0 through 100 and cannot exceed the gross line
 amount. A nullable unique idempotency key makes a retry safe for the same user and location.
-Returns remain #25, invoice rendering remains #26, retention remains #27, and reporting
-integration remains #31.
+
+Customer returns (`POST /api/sales/returns`) run in one atomic database transaction:
+1. Concurrency: takes a row lock (`SELECT ... FOR UPDATE`) on the `sales` record to serialise parallel returns
+   and verify remaining returnable quantities against actual sold quantities.
+2. Return window & Manager override: sales within `RETURN_WINDOW_DAYS` (default 30 calendar days, evaluated in UTC)
+   are accepted without approval. Sales older than 30 days require Manager approval (SRS A-1, A-11). If the processor
+   holds `RETURNS_APPROVE_LATE` (Manager or Admin), the return is self-approved. Otherwise, the processor provides
+   the Manager's credentials in `manager_approval`. The auth module's public `verify_override(db, username, password, permission)`
+   verifies the approving user using `authenticate()`, preserving lockout counting (SRS A-12), dummy-hash timing attack
+   protection, and denial auditing without starting a new session. Failed override attempts record a generic error
+   (`"Manager approval failed."`) and persist lockout counts across request rollbacks.
+3. Refund allocation: proportional share of the original `line_total` (including tax and discounts) using
+   `ROUND_HALF_UP` to two decimal places:
+   `round(line_total * (already_returned + now_returned) / sold) - round(line_total * already_returned / sold)`.
+   Cumulative line refunds over multiple returns add up exactly to the original line total.
+4. Condition & Restocking:
+   - Resaleable: untracked items increase stock via `update_stock(movement_type="return")` at the original sale's location.
+     Serial-tracked items restore units via `restore_returned_serials` and batch-tracked units restore quantity via
+     `restore_returned_batch_units`. Units remain linked to the original sale line.
+   - Damaged: items are recorded in `return_lines` with `condition="damaged"` and `restocked=False`, routing them to a
+     non-sellable state without modifying stock levels or sellable stock movements.
+   - Deleted items: if a product or variant was deactivated since the sale, return and refund are recorded with
+     `restocked=False` instead of failing.
+5. Return status: `return_status` is computed dynamically on read ("none", "partially_returned", "fully_returned")
+   without modifying `sales`, `sale_lines` or `invoices` tables.
+6. Credit note data: credit note number format `CN-<return_id>` zero-padded. Audit entries `return_processed` and
+   (for late returns) `return_late_approved` are recorded atomically.
+
+Invoice and credit note PDF/printable layout remains #26, retention and delete protection remains #27, and sales trend
+report netting remains #31 (net sales subtract `return_lines.refund_amount`).
 
 ## Product catalog
 
