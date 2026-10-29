@@ -17,13 +17,17 @@ from app.modules.auth._internal.permissions import (
 from app.modules.auth.service import (
     AuthService,
     CurrentUser,
+    ManagerApprovalError,
     Permission,
     po_status_notification_recipients,
+    username_by_id,
+    verify_override,
 )
 
 __all__ = [
     "AuthService",
     "CurrentUser",
+    "ManagerApprovalError",
     "Permission",
     "po_status_notification_recipients",
     "authorize",
@@ -34,4 +38,6 @@ __all__ = [
     "has_permission",
     "require",
     "signed_in",
+    "username_by_id",
+    "verify_override",
 ]
