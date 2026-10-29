@@ -122,6 +122,30 @@ test('ConfirmDialog keeps Tab inside the dialog', async () => {
   expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
 });
 
+test('ConfirmDialog renders custom children and keeps Tab inside', async () => {
+  const onConfirm = vi.fn();
+  const onCancel = vi.fn();
+  render(
+    <ConfirmDialog
+      open
+      title="Approve override"
+      confirmLabel="Approve"
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    >
+      <input data-testid="override-input" type="text" placeholder="Username" />
+    </ConfirmDialog>,
+  );
+  expect(screen.getByTestId('override-input')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  await userEvent.tab();
+  expect(screen.getByRole('button', { name: 'Approve' })).toHaveFocus();
+  await userEvent.tab();
+  expect(screen.getByTestId('override-input')).toHaveFocus();
+  await userEvent.tab();
+  expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+});
+
 test('a closed ConfirmDialog renders nothing', () => {
   dialog({ open: false });
   expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();

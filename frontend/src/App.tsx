@@ -15,7 +15,7 @@ import {
   ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
-import { PosPage } from './modules/sales';
+import { PosPage, ReturnsPage } from './modules/sales';
 import { StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import {
@@ -123,6 +123,8 @@ export default function App() {
               <StockTransferPage />
             ) : item.path === '/sales' ? (
               <PosPage />
+            ) : item.path === '/returns' ? (
+              <ReturnsPage />
             ) : item.path === '/categories' ? (
               <CategoriesPage />
             ) : item.path === '/suppliers' ? (

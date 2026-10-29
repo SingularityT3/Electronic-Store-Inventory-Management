@@ -35,6 +35,100 @@ export interface Sale {
   }[];
   payments: { id: number; method: string; amount: string; reference: string | null }[];
   invoice: { invoice_number: number; issued_at: string; total: string };
+  return_status?: 'none' | 'partially_returned' | 'fully_returned';
+}
+
+export interface SaleLookupLine {
+  id: number;
+  product_id: number;
+  product_name: string;
+  sku: string;
+  variant_id: number | null;
+  variant_sku: string | null;
+  variant_attributes: Record<string, unknown> | null;
+  quantity: number;
+  unit_price: string;
+  discount_amount: string;
+  tax_amount: string;
+  line_total: string;
+  serial_numbers: string[];
+  quantity_returned: number;
+  quantity_returnable: number;
+  returnable_serials: string[];
+  returnable_serial_ids: number[];
+}
+
+export interface SaleLookup {
+  id: number;
+  location_id: number;
+  location_name: string;
+  cashier_id: number;
+  sold_at: string;
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  total: string;
+  customer_name: string | null;
+  lines: SaleLookupLine[];
+  days_since_sale: number;
+  return_window_days: number;
+  requires_manager_approval: boolean;
+  return_status: 'none' | 'partially_returned' | 'fully_returned';
+  invoice: {
+    invoice_number: number;
+    issued_at: string;
+    total: string;
+  };
+}
+
+export interface ReturnLineInput {
+  sale_line_id: number;
+  quantity: number;
+  condition: 'resaleable' | 'damaged';
+  serial_number_ids?: number[];
+}
+
+export interface ManagerApprovalInput {
+  username: string;
+  password: string;
+}
+
+export interface ReturnInput {
+  invoice_number: string | number;
+  lines: ReturnLineInput[];
+  reason: string;
+  manager_approval?: ManagerApprovalInput;
+}
+
+export interface ReturnCreditNoteLine {
+  id: number;
+  sale_line_id: number;
+  product_id: number;
+  product_name: string;
+  sku: string;
+  variant_id: number | null;
+  variant_sku: string | null;
+  quantity: number;
+  condition: string;
+  restocked: boolean;
+  refund_amount: string;
+  serial_numbers: string[];
+}
+
+export interface ReturnCreditNote {
+  return_id: number;
+  credit_note_number: string;
+  sale_id: number;
+  invoice_number: number;
+  created_at: string;
+  location_id: number;
+  location_name: string;
+  processed_by_username: string;
+  approved_by_username: string | null;
+  reason: string;
+  refund_total: string;
+  non_sellable_quantity: number;
+  lines: ReturnCreditNoteLine[];
 }
 
 export const salesApi = {
@@ -45,4 +139,9 @@ export const salesApi = {
   },
   create: (body: object) => api<Sale>('/sales', { method: 'POST', body }),
   get: (id: number) => api<Sale>(`/sales/${id}`),
+  lookupByInvoice: (invoiceNumber: string | number) =>
+    api<SaleLookup>(`/sales/by-invoice/${encodeURIComponent(String(invoiceNumber).trim())}`),
+  processReturn: (body: ReturnInput) =>
+    api<ReturnCreditNote>('/sales/returns', { method: 'POST', body }),
+  getCreditNote: (returnId: number) => api<ReturnCreditNote>(`/sales/returns/${returnId}`),
 };

@@ -1,13 +1,16 @@
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  message: string;
+  message?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmDisabled?: boolean;
+  confirmVariant?: 'danger' | 'primary';
   onConfirm: () => void;
   onCancel: () => void;
+  children?: ReactNode;
 }
 
 /**
@@ -20,11 +23,15 @@ export default function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  confirmDisabled = false,
+  confirmVariant = 'danger',
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   const titleId = useId();
   const messageId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
@@ -42,14 +49,20 @@ export default function ConfirmDialog({
       event.stopPropagation();
       onCancel();
     } else if (event.key === 'Tab') {
-      const first = cancelRef.current;
-      const last = confirmRef.current;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) || [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last?.focus();
+        last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first?.focus();
+        first.focus();
       }
     }
   }
@@ -57,20 +70,28 @@ export default function ConfirmDialog({
   return (
     <div className="dialog-backdrop">
       <div
+        ref={dialogRef}
         className="dialog"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={messageId}
+        aria-describedby={message ? messageId : undefined}
         onKeyDown={onKeyDown}
       >
         <h2 id={titleId}>{title}</h2>
-        <p id={messageId}>{message}</p>
+        {message && <p id={messageId}>{message}</p>}
+        {children}
         <div className="dialog-actions">
           <button type="button" ref={cancelRef} onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button type="button" ref={confirmRef} className="danger" onClick={onConfirm}>
+          <button
+            type="button"
+            ref={confirmRef}
+            className={confirmVariant}
+            disabled={confirmDisabled}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>
