@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api';
 import { ConfirmDialog, DataTable, FormField, type Column } from '../../shell/components';
 import {
@@ -22,21 +23,75 @@ interface DraftLine extends PurchaseOrderLineInput {
   sku: string;
 }
 
+interface ReorderPrefill {
+  product_id: number;
+  variant_id: number | null;
+  product_name: string;
+  sku: string;
+  quantity: number;
+  location_id: number;
+}
+
 function currency(value: string | number): string {
   return Number(value).toFixed(2);
 }
 
 export default function PurchaseOrdersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reorderPrefill = useMemo<ReorderPrefill | null>(() => {
+    const productId = Number(searchParams.get('product_id'));
+    const quantity = Number(searchParams.get('quantity'));
+    const locationId = Number(searchParams.get('location_id'));
+    const rawVariantId = searchParams.get('variant_id');
+    const variantId = rawVariantId === null ? null : Number(rawVariantId);
+    if (
+      !Number.isSafeInteger(productId) ||
+      productId <= 0 ||
+      !Number.isSafeInteger(quantity) ||
+      quantity <= 0 ||
+      !Number.isSafeInteger(locationId) ||
+      locationId <= 0 ||
+      (variantId !== null && (!Number.isSafeInteger(variantId) || variantId <= 0))
+    ) {
+      return null;
+    }
+    return {
+      product_id: productId,
+      variant_id: variantId,
+      product_name: searchParams.get('product_name') ?? 'Reorder item',
+      sku: searchParams.get('variant_sku') ?? searchParams.get('sku') ?? '',
+      quantity,
+      location_id: locationId,
+    };
+  }, [searchParams]);
+
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [catalog, setCatalog] = useState<SupplierProduct[]>([]);
+  const [catalogLoadedFor, setCatalogLoadedFor] = useState('');
   const [selected, setSelected] = useState<PurchaseOrder | null>(null);
   const [supplierId, setSupplierId] = useState('');
-  const [locationId, setLocationId] = useState('');
+  const [locationId, setLocationId] = useState(() =>
+    reorderPrefill ? String(reorderPrefill.location_id) : '',
+  );
   const [deliveryDate, setDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [lines, setLines] = useState<DraftLine[]>(() =>
+    reorderPrefill
+      ? [
+          {
+            key: 'reorder-prefill',
+            product_id: reorderPrefill.product_id,
+            variant_id: reorderPrefill.variant_id,
+            product_name: reorderPrefill.product_name,
+            sku: reorderPrefill.sku,
+            quantity_ordered: reorderPrefill.quantity,
+            unit_price: '',
+          },
+        ]
+      : [],
+  );
   const [catalogChoice, setCatalogChoice] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -83,12 +138,19 @@ export default function PurchaseOrdersPage() {
   useEffect(() => {
     if (!supplierId) {
       setCatalog([]);
+      setCatalogLoadedFor('');
       return;
     }
     let current = true;
+    setCatalog([]);
+    setCatalogLoadedFor('');
     purchasingApi
       .supplierProducts(Number(supplierId))
-      .then((rows) => current && setCatalog(rows))
+      .then((rows) => {
+        if (!current) return;
+        setCatalog(rows);
+        setCatalogLoadedFor(supplierId);
+      })
       .catch((cause: unknown) => {
         if (current) {
           setError(cause instanceof ApiError ? cause.message : 'Could not load supplier catalog.');
@@ -98,6 +160,34 @@ export default function PurchaseOrdersPage() {
       current = false;
     };
   }, [supplierId]);
+
+  useEffect(() => {
+    if (!reorderPrefill || selected || !supplierId || catalogLoadedFor !== supplierId) {
+      return;
+    }
+    const catalogItem = catalog.find(
+      (item) =>
+        item.product_id === reorderPrefill.product_id &&
+        item.variant_id === reorderPrefill.variant_id,
+    );
+    if (!catalogItem) {
+      setError('Selected supplier does not have this product or variant in its catalog.');
+      return;
+    }
+    setError('');
+    setLines((current) =>
+      current.map((line) =>
+        line.key === 'reorder-prefill'
+          ? {
+              ...line,
+              product_name: catalogItem.product_name,
+              sku: catalogItem.product_sku,
+              unit_price: catalogItem.supplier_price,
+            }
+          : line,
+      ),
+    );
+  }, [catalog, catalogLoadedFor, reorderPrefill, selected, supplierId]);
 
   const totalCents = useMemo(
     () =>
@@ -110,6 +200,7 @@ export default function PurchaseOrdersPage() {
   const canEdit = selected === null || selected.status === 'draft';
 
   function clearForm() {
+    setSearchParams({}, { replace: true });
     setSelected(null);
     setSupplierId('');
     setLocationId('');
@@ -209,6 +300,10 @@ export default function PurchaseOrdersPage() {
       lines.some((line) => !Number.isFinite(Number(line.unit_price)) || Number(line.unit_price) < 0)
     ) {
       setFieldErrors({ unit_price: 'Unit price cannot be negative.' });
+      return;
+    }
+    if (lines.some((line) => line.unit_price.trim() === '')) {
+      setFieldErrors({ unit_price: 'Choose a supplier catalog price for each line.' });
       return;
     }
     const body: PurchaseOrderInput = {
@@ -334,7 +429,12 @@ export default function PurchaseOrdersPage() {
                 value={supplierId}
                 onChange={(event) => {
                   setSupplierId(event.target.value);
-                  setLines([]);
+                  setError('');
+                  setLines((current) =>
+                    current
+                      .filter((line) => line.key === 'reorder-prefill')
+                      .map((line) => ({ ...line, unit_price: '' })),
+                  );
                 }}
               >
                 <option value="">Choose an active supplier</option>
@@ -348,6 +448,12 @@ export default function PurchaseOrdersPage() {
               </select>
             )}
           </FormField>
+          {reorderPrefill && !supplierId && canEdit && (
+            <p>
+              Reorder {reorderPrefill.quantity} unit(s) of {reorderPrefill.product_name}. Choose a
+              supplier that carries this item to load its catalog price.
+            </p>
+          )}
           <FormField label="Receiving location" error={fieldErrors.location_id}>
             {(props) => (
               <select
@@ -480,7 +586,17 @@ export default function PurchaseOrdersPage() {
             Order total: <strong>{currency(totalCents / 100)}</strong>
           </p>
           {canEdit && (
-            <button type="submit" disabled={saving || !supplierId || !locationId || !deliveryDate}>
+            <button
+              type="submit"
+              disabled={
+                saving ||
+                !supplierId ||
+                !locationId ||
+                !deliveryDate ||
+                (reorderPrefill !== null &&
+                  lines.some((line) => line.key === 'reorder-prefill' && !line.unit_price))
+              }
+            >
               {saving ? 'Saving…' : selected ? 'Save draft' : 'Create draft'}
             </button>
           )}

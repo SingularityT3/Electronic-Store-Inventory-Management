@@ -188,10 +188,12 @@ def test_reorder_report_filters_thresholds_and_uses_reorder_to(client, make_user
 
     all_locations = client.get("/api/reporting/reorder")
     assert all_locations.status_code == 200, all_locations.text
+    assert len(all_locations.json()) == 2
     assert {(row["location_name"], row["sku"]) for row in all_locations.json()} == {
         ("Reorder Store", "REORDER-LOW"),
         ("Other Reorder Store", "REORDER-LOW"),
     }
+    assert all(row["quantity"] <= row["reorder_threshold"] for row in all_locations.json())
     custom = next(row for row in all_locations.json() if row["location_id"] == location.id)
     assert custom["suggested_quantity"] == 9
     defaulted = next(row for row in all_locations.json() if row["location_id"] == other_location.id)
@@ -210,7 +212,15 @@ def test_staff_cannot_access_stock_reports(client, make_user):
     assert client.get("/api/reporting/reorder").status_code == 403
 
 
-def test_cashier_cannot_access_stock_valuation(client, make_user):
+def test_cashier_cannot_access_stock_reports(client, make_user):
     make_user("report_cashier", role="cashier", location_id=1)
     assert login(client, "report_cashier").status_code == 200
     assert client.get("/api/reporting/valuation").status_code == 403
+    assert client.get("/api/reporting/reorder").status_code == 403
+
+
+def test_admin_can_access_reorder_report(client, make_user):
+    make_user("report_admin", role="admin")
+    assert login(client, "report_admin").status_code == 200
+    response = client.get("/api/reporting/reorder")
+    assert response.status_code == 200, response.text

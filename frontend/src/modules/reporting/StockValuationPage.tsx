@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, api } from '../../api';
 import { DataTable, FormField, type Column } from '../../shell/components';
 
@@ -107,6 +108,7 @@ export default function StockValuationPage() {
     <div className="page">
       <header className="page-header">
         <h1>Stock valuation</h1>
+        <Link to="/reports/reorder">Low-stock &amp; reorder report</Link>
       </header>
       {error && (
         <p role="alert" className="error">

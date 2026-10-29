@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import StockValuationPage from './StockValuationPage';
 
 afterEach(() => {
@@ -71,10 +72,18 @@ function mockApi(report = allLocationsReport) {
   return calls;
 }
 
+function renderPage() {
+  render(
+    <MemoryRouter>
+      <StockValuationPage />
+    </MemoryRouter>,
+  );
+}
+
 test('shows valuation details and refreshes the report when filtering by location', async () => {
   const calls = mockApi();
   const user = userEvent.setup();
-  render(<StockValuationPage />);
+  renderPage();
 
   expect(screen.getByText('Loading stock valuation…')).toBeInTheDocument();
   const table = await screen.findByRole('table', { name: 'Stock valuation' });
@@ -94,7 +103,7 @@ test('shows valuation details and refreshes the report when filtering by locatio
 
 test('shows an empty state when the selected location has no stock', async () => {
   mockApi({ items: [], total_value: '0' });
-  render(<StockValuationPage />);
+  renderPage();
 
   expect(await screen.findByText('No stock valuation data for this location.')).toBeInTheDocument();
   expect(screen.getByText('Total inventory value:')).toHaveTextContent('₹0.00');
@@ -112,7 +121,7 @@ test('shows report load errors', async () => {
       }),
     ),
   );
-  render(<StockValuationPage />);
+  renderPage();
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Report unavailable.');
 });
