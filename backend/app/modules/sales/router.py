@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_session
-from app.modules.auth import CurrentUser, Permission, authorize_location, require
+from app.modules.auth import (
+    CurrentUser,
+    ManagerApprovalError,
+    Permission,
+    authorize_location,
+    require,
+)
 from app.modules.sales._internal.models import (
     Invoice,
     Payment,
@@ -22,10 +28,19 @@ from app.modules.sales._internal.models import (
     SaleLineSerial,
 )
 from app.modules.sales.service import (
+    InvoiceNotFoundError,
     PaymentInput,
+    ReturnLateApprovalRequiredError,
+    ReturnLineInput,
     SaleInputError,
     SaleLineInput,
     SaleStockError,
+    SaleTrackingError,
+    get_credit_note,
+    get_sale_return_status,
+    lookup_sale_by_invoice,
+    parse_invoice_number,
+    process_return,
     record_sale,
 )
 from app.modules.stock import (
@@ -111,6 +126,98 @@ class SaleOut(BaseModel):
     lines: list[SaleLineOut]
     payments: list[PaymentOut]
     invoice: InvoiceOut
+    return_status: Literal["none", "partially_returned", "fully_returned"] = "none"
+
+
+class SaleLookupLineOut(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    sku: str
+    variant_id: int | None
+    variant_sku: str | None
+    variant_attributes: dict[str, object] | None
+    quantity: int
+    unit_price: Decimal
+    discount_amount: Decimal
+    tax_amount: Decimal
+    line_total: Decimal
+    serial_numbers: list[str] = Field(default_factory=list)
+    quantity_returned: int
+    quantity_returnable: int
+    returnable_serials: list[str] = Field(default_factory=list)
+    returnable_serial_ids: list[int] = Field(default_factory=list)
+
+
+class SaleLookupOut(BaseModel):
+    id: int
+    location_id: int
+    location_name: str
+    cashier_id: int
+    sold_at: datetime
+    subtotal: Decimal
+    discount_total: Decimal
+    tax_total: Decimal
+    total: Decimal
+    customer_name: str | None
+    lines: list[SaleLookupLineOut]
+    payments: list[PaymentOut]
+    invoice: InvoiceOut
+    return_status: Literal["none", "partially_returned", "fully_returned"]
+    days_since_sale: int
+    return_window_days: int
+    requires_manager_approval: bool
+
+
+class ReturnLineIn(BaseModel):
+    sale_line_id: int = Field(ge=1)
+    quantity: int = Field(ge=1)
+    condition: Literal["resaleable", "damaged"] = "resaleable"
+    serial_number_ids: list[int] | None = None
+
+
+class ManagerApprovalIn(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class ReturnIn(BaseModel):
+    invoice_number: str | int
+    lines: list[ReturnLineIn]
+    reason: str = Field(min_length=1, max_length=500)
+    manager_approval: ManagerApprovalIn | None = None
+
+
+class ReturnCreditNoteLineOut(BaseModel):
+    id: int
+    sale_line_id: int
+    product_id: int
+    product_name: str
+    sku: str
+    variant_id: int | None
+    variant_sku: str | None
+    quantity: int
+    condition: str
+    restocked: bool
+    refund_amount: Decimal
+    serial_numbers: list[str] = Field(default_factory=list)
+
+
+class ReturnCreditNoteOut(BaseModel):
+    credit_note_number: str
+    return_id: int
+    sale_id: int
+    invoice_number: int
+    created_at: datetime
+    sold_at: datetime
+    location_id: int
+    location_name: str
+    reason: str
+    processor_username: str
+    approver_username: str | None
+    refund_total: Decimal
+    non_sellable_quantity: int
+    lines: list[ReturnCreditNoteLineOut]
 
 
 class BatchLocationOut(BaseModel):
@@ -193,6 +300,7 @@ def _sale_out(db: Session, sale: Sale) -> SaleOut:
             issued_at=invoice.issued_at,
             total=invoice.total,
         ),
+        return_status=get_sale_return_status(db, sale.id),
     )
 
 
@@ -358,6 +466,158 @@ def batch_recall(
         ],
         sold=sold_rows,
     )
+
+
+@router.get("/by-invoice", include_in_schema=False)
+@router.get("/by-invoice/", include_in_schema=False)
+def get_sale_by_invoice_empty(
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+) -> None:
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+
+
+@router.get("/by-invoice/{invoice_number}", response_model=SaleLookupOut)
+def get_sale_by_invoice(
+    invoice_number: str,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SaleLookupOut:
+    try:
+        data = lookup_sale_by_invoice(db, invoice_number_raw=invoice_number, settings=settings)
+    except InvoiceNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found") from None
+
+    authorize_location(db, user, data.sale.location_id, "Read sale")
+
+    return SaleLookupOut(
+        id=data.sale.id,
+        location_id=data.sale.location_id,
+        location_name=data.location_name,
+        cashier_id=data.sale.cashier_id,
+        sold_at=data.sale.sold_at,
+        subtotal=data.sale.subtotal,
+        discount_total=data.sale.discount_total,
+        tax_total=data.sale.tax_total,
+        total=data.sale.total,
+        customer_name=data.sale.customer_name,
+        lines=[
+            SaleLookupLineOut(
+                id=line.id,
+                product_id=line.product_id,
+                product_name=line.product_name,
+                sku=line.sku,
+                variant_id=line.variant_id,
+                variant_sku=line.variant_sku,
+                variant_attributes=line.variant_attributes,
+                quantity=line.quantity,
+                unit_price=line.unit_price,
+                discount_amount=line.discount_amount,
+                tax_amount=line.tax_amount,
+                line_total=line.line_total,
+                serial_numbers=line.serial_numbers,
+                quantity_returned=line.quantity_returned,
+                quantity_returnable=line.quantity_returnable,
+                returnable_serials=line.returnable_serials,
+                returnable_serial_ids=line.returnable_serial_ids,
+            )
+            for line in data.lines
+        ],
+        payments=[PaymentOut.model_validate(p, from_attributes=True) for p in data.payments],
+        invoice=InvoiceOut(
+            invoice_number=data.invoice.invoice_number,
+            issued_at=data.invoice.issued_at,
+            total=data.invoice.total,
+        ),
+        return_status=data.return_status,
+        days_since_sale=data.days_since_sale,
+        return_window_days=data.return_window_days,
+        requires_manager_approval=data.requires_manager_approval,
+    )
+
+
+@router.post("/returns", response_model=ReturnCreditNoteOut, status_code=status.HTTP_201_CREATED)
+def create_return(
+    body: ReturnIn,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ReturnCreditNoteOut:
+    inv_num = parse_invoice_number(body.invoice_number)
+    if inv_num is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    invoice = db.scalar(select(Invoice).where(Invoice.invoice_number == inv_num))
+    if invoice is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    sale = db.scalar(select(Sale).where(Sale.id == invoice.sale_id))
+    if sale is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    authorize_location(db, user, sale.location_id, "Process return")
+
+    approval_tuple = (
+        (body.manager_approval.username, body.manager_approval.password)
+        if body.manager_approval
+        else None
+    )
+    line_inputs = [
+        ReturnLineInput(
+            sale_line_id=line.sale_line_id,
+            quantity=line.quantity,
+            condition=line.condition,
+            serial_number_ids=tuple(line.serial_number_ids or ()),
+        )
+        for line in body.lines
+    ]
+
+    try:
+        credit_note = process_return(
+            db,
+            invoice_number_raw=body.invoice_number,
+            lines=line_inputs,
+            reason=body.reason,
+            processor_id=user.id,
+            processor_username=user.username,
+            processor_role=user.role,
+            manager_approval=approval_tuple,
+            settings=settings,
+        )
+        db.commit()
+        return ReturnCreditNoteOut.model_validate(credit_note, from_attributes=True)
+    except InvoiceNotFoundError:
+        db.rollback()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found") from None
+    except ReturnLateApprovalRequiredError:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {
+                "code": "manager_approval_required",
+                "message": "Manager approval is required for sales older than 30 days.",
+            },
+        ) from None
+    except ManagerApprovalError:
+        db.rollback()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Manager approval failed.") from None
+    except SaleInputError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, exc.errors) from None
+    except SaleTrackingError as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get("/returns/{return_id}", response_model=ReturnCreditNoteOut)
+def get_return(
+    return_id: int,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+) -> ReturnCreditNoteOut:
+    credit_note = get_credit_note(db, return_id)
+    authorize_location(db, user, credit_note.location_id, "Read credit note")
+    return ReturnCreditNoteOut.model_validate(credit_note, from_attributes=True)
 
 
 @router.get("/{sale_id}", response_model=SaleOut)
