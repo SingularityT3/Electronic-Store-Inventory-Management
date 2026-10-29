@@ -72,3 +72,26 @@ export async function api<T = void>(
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
 }
+
+/** Download a file from the backend, e.g. a report export, and hand it to the browser. */
+export async function downloadFile(path: string): Promise<void> {
+  const response = await fetch(`/api${path}`, { credentials: 'same-origin' });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    throw new ApiError(
+      response.status,
+      typeof data.detail === 'string' ? data.detail : 'Something went wrong',
+    );
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'export';
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

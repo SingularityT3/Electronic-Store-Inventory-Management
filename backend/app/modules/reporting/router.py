@@ -1,15 +1,31 @@
 """HTTP routes for the `reporting` module."""
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_session
 from app.modules.auth import Permission, require
-from app.modules.reporting.service import reorder_rows, valuation_rows
+from app.modules.reporting._internal.export import (
+    CSV_MEDIA_TYPE,
+    PDF_MEDIA_TYPE,
+    ReportTable,
+    csv_chunks,
+    export_filename,
+    pdf_bytes,
+)
+from app.modules.reporting.service import (
+    reorder_rows,
+    reorder_table,
+    valuation_rows,
+    valuation_table,
+)
 from app.modules.stock import location_exists
 
 router = APIRouter(prefix="/reporting", tags=["reporting"])
@@ -112,3 +128,45 @@ def reorder_report(
         )
         for position, suggested_quantity in reorder_rows(db, location_id=location_id)
     ]
+
+
+ExportFormat = Literal["csv", "pdf"]
+
+
+def _export(
+    db: Session,
+    build: Callable[..., ReportTable],
+    location_id: int | None,
+    export_format: ExportFormat,
+) -> Response:
+    if location_id is not None and not location_exists(db, location_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
+    table = build(db, location_id=location_id)
+    generated_at = datetime.now(UTC)
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{export_filename(table.title, generated_at, export_format)}"'
+        ),
+        "Cache-Control": "no-store",
+    }
+    if export_format == "csv":
+        return StreamingResponse(csv_chunks(table), media_type=CSV_MEDIA_TYPE, headers=headers)
+    return Response(pdf_bytes(table, generated_at), media_type=PDF_MEDIA_TYPE, headers=headers)
+
+
+@router.get("/valuation/export", dependencies=[Depends(require(Permission.REPORTS_VIEW))])
+def export_stock_valuation(
+    db: Annotated[Session, Depends(get_session)],
+    export_format: Annotated[ExportFormat, Query(alias="format")],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> Response:
+    return _export(db, valuation_table, location_id, export_format)
+
+
+@router.get("/reorder/export", dependencies=[Depends(require(Permission.REPORTS_VIEW))])
+def export_reorder_report(
+    db: Annotated[Session, Depends(get_session)],
+    export_format: Annotated[ExportFormat, Query(alias="format")],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> Response:
+    return _export(db, reorder_table, location_id, export_format)
