@@ -12,7 +12,7 @@ Status:
 
 Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend/src`. Tests written for this table are named after their ID (`test_fr1_1_it_3_...` in `test_plan_cases.py`).
 
-Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
+Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
 
 
 ## 3.1 Product Management
@@ -48,7 +48,7 @@ Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
 
 ## 3.2 Stock Management
 
-40 cases: 25 automated, 3 partial, 1 manual, 11 pending.
+40 cases: 26 automated, 3 partial, 1 manual, 10 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
 | FR2.5-UT-2 | Pending |  | PO receiving is not in main yet (#22) |
 | FR2.5-UT-3 | Partial | `test_plan_cases.py::test_fr2_5_ut_3_duplicate_serial_number_is_rejected` | Enforced by the database; the entry screen and API arrive with pO receiving is not in main yet (#22) |
 | FR2.5-IT-1 | Pending |  | Sales transactions are not in main yet (#24) |
-| FR2.5-IT-2 | Pending |  | Returns are not in main yet (#25) |
+| FR2.5-IT-2 | Automated | `test_returns.py::test_tracked_items_serial_and_batch_returns` |  |
 | FR2.5-IT-3 | Pending |  | No batch lookup API yet |
 | FR2.5-ST-1 | Pending |  | PO receiving is not in main yet (#22); Sales transactions are not in main yet (#24) |
 | FR2.5-ST-2 | Automated | `test_stock_adjustments.py::test_positive_adjustment_increases_stock` ; `test_stock_transfers.py::test_transfer_updates_stock_movements_audit_and_valuation` | Untracked products adjust and transfer with no batch or serial |
@@ -134,7 +134,7 @@ Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
 
 ## 3.4 Sales / Orders
 
-24 cases: 2 partial, 22 pending.
+24 cases: 6 automated, 2 partial, 16 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -146,14 +146,14 @@ Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
 | FR4.1-IT-3 | Pending |  | Sales transactions are not in main yet (#24); sales trend report is #31 |
 | FR4.1-ST-1 | Pending |  | Sales transactions are not in main yet (#24); Invoices are not in main yet (#26) |
 | FR4.1-ST-2 | Pending |  | Sales transactions are not in main yet (#24) |
-| FR4.2-UT-1 | Pending |  | Returns are not in main yet (#25) |
-| FR4.2-UT-2 | Pending |  | Returns are not in main yet (#25) |
-| FR4.2-UT-3 | Pending |  | Returns are not in main yet (#25) |
-| FR4.2-IT-1 | Partial | `test_constraints.py::test_damaged_return_cannot_be_restocked` | Enforced by the database; Returns are not in main yet (#25) |
-| FR4.2-IT-2 | Pending |  | Returns are not in main yet (#25) |
-| FR4.2-IT-3 | Pending |  | Returns are not in main yet (#25); sales trend report is #31 |
-| FR4.2-ST-1 | Pending |  | Returns are not in main yet (#25) |
-| FR4.2-ST-2 | Pending |  | Returns are not in main yet (#25) |
+| FR4.2-UT-1 | Automated | `test_returns.py::test_fr4_2_ut_1_valid_return_generates_credit_note` |  |
+| FR4.2-UT-2 | Automated | `test_returns.py::test_fr4_2_ut_2_resaleable_unit_restocks_inventory` |  |
+| FR4.2-UT-3 | Automated | `test_returns.py::test_fr4_2_ut_3_invoice_lookup_valid_and_invalid` |  |
+| FR4.2-IT-1 | Automated | `test_returns.py::test_fr4_2_it_1_damaged_line_not_restocked_and_mixed_return` ; `test_constraints.py::test_damaged_return_cannot_be_restocked` |  |
+| FR4.2-IT-2 | Automated | `test_returns.py::test_fr4_2_it_2_late_return_manager_override_and_lockout` |  |
+| FR4.2-IT-3 | Pending | `test_returns.py::test_fr4_2_it_3_net_sales_data_aggregatable` | Sales trend report is #31; test confirms return data supports netting |
+| FR4.2-ST-1 | Partial | `test_returns.py::test_fr4_2_st_1_end_to_end_sale_to_return` | End-to-end return automated through API; sales trend netting is pending #31 |
+| FR4.2-ST-2 | Automated | `test_returns.py::test_authorization_and_location_scoping` |  |
 | FR4.3-UT-1 | Pending |  | Invoices are not in main yet (#26) |
 | FR4.3-UT-2 | Pending |  | Invoices are not in main yet (#26) |
 | FR4.3-UT-3 | Pending |  | Invoices are not in main yet (#26) |

@@ -257,6 +257,24 @@ erDiagram
         bigint invoice_number UK
         numeric total
     }
+    returns {
+        int id PK
+        int sale_id FK
+        int processed_by FK
+        int approved_by FK "NULL if within return window"
+        text reason
+        numeric refund_total
+        timestamptz created_at
+    }
+    return_lines {
+        int id PK
+        int return_id FK
+        int sale_line_id FK
+        int quantity "CHECK > 0"
+        text condition "resaleable | damaged"
+        bool restocked "CHECK false when damaged"
+        numeric refund_amount "CHECK >= 0"
+    }
 ```
 
 ## Working with migrations

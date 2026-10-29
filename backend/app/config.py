@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     product_image_dir: str = "/data/product-images"
     product_image_max_bytes: int = 5 * 1024 * 1024
     gst_rate: Decimal = Decimal("18")
+    return_window_days: int = 30
 
 
 @lru_cache
