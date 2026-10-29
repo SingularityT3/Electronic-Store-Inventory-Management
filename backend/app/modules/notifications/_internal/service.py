@@ -124,6 +124,14 @@ def active_stock_alerts(db: Session, *, location_id: int | None = None) -> list[
     ]
 
 
+def alerted_product_ids(db: Session, *, location_id: int | None = None) -> set[int]:
+    """Ids of products with an active alert; reads one column, for catalogue-wide filters."""
+    query = select(StockAlert.product_id).where(StockAlert.alert_type.is_not(None)).distinct()
+    if location_id is not None:
+        query = query.where(StockAlert.location_id == location_id)
+    return set(db.scalars(query))
+
+
 def record_purchase_order_status(
     db: Session,
     *,

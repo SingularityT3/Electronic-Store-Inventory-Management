@@ -9,3 +9,4 @@ coverage/
 frontend/tsconfig.tsbuildinfo
 *.log
 .env.prod
+backend/loadtest-results.md

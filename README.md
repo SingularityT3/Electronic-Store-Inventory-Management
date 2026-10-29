@@ -53,6 +53,9 @@ Every case in the test plan is mapped to its tests in
 [`backend/tests/TRACEABILITY.md`](backend/tests/TRACEABILITY.md); `tests/test_traceability.py` keeps
 that table in step with the plan and the test code.
 
+Performance and load test (10,000 SKUs, concurrent sales, large exports):
+[`docs/performance.md`](docs/performance.md).
+
 ## Deploy
 
 Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md).
