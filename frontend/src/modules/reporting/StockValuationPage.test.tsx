@@ -5,6 +5,7 @@ import StockValuationPage from './StockValuationPage';
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const locations = [
@@ -115,4 +116,50 @@ test('shows report load errors', async () => {
   render(<StockValuationPage />);
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Report unavailable.');
+});
+
+test('exports the filtered report and shows a retryable error when the export fails', async () => {
+  const exportCalls: string[] = [];
+  const createObjectURL = vi.fn(() => 'blob:report');
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url.includes('/export')) {
+        exportCalls.push(url);
+        if (exportCalls.length === 1) {
+          return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'Content-Disposition': 'attachment; filename="Stock_Valuation_Report_2026-09-07.csv"',
+          }),
+          blob: async () => new Blob(['x']),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => (url === '/api/stock/locations' ? locations : allLocationsReport),
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  render(<StockValuationPage />);
+
+  await screen.findByRole('table', { name: 'Stock valuation' });
+  await user.selectOptions(screen.getByLabelText('Location'), '1');
+  await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Export failed');
+
+  await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+  await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+  expect(exportCalls).toEqual([
+    '/api/reporting/valuation/export?format=csv&location_id=1',
+    '/api/reporting/valuation/export?format=csv&location_id=1',
+  ]);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
-import { ApiError, api } from '../../api';
+import { ApiError, api, downloadFile } from '../../api';
 import { DataTable, FormField, type Column } from '../../shell/components';
 
 interface Location {
@@ -55,6 +55,8 @@ export default function StockValuationPage() {
   const [locationId, setLocationId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -101,6 +103,23 @@ export default function StockValuationPage() {
     [],
   );
 
+  async function exportReport(format: 'csv' | 'pdf') {
+    setExporting(true);
+    setExportError('');
+    const filter = locationId ? `&location_id=${encodeURIComponent(locationId)}` : '';
+    try {
+      await downloadFile(`/reporting/valuation/export?format=${format}${filter}`);
+    } catch (cause) {
+      setExportError(
+        cause instanceof ApiError
+          ? `Export failed: ${cause.message} Try again.`
+          : 'Export failed. Try again.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) return <p className="loading">Loading stock valuation…</p>;
 
   return (
@@ -133,6 +152,19 @@ export default function StockValuationPage() {
               </select>
             )}
           </FormField>
+          <div role="group" aria-label="Export">
+            <button type="button" disabled={exporting} onClick={() => exportReport('csv')}>
+              Export CSV
+            </button>{' '}
+            <button type="button" disabled={exporting} onClick={() => exportReport('pdf')}>
+              Export PDF
+            </button>
+          </div>
+          {exportError && (
+            <p role="alert" className="error">
+              {exportError}
+            </p>
+          )}
           <p>
             Total inventory value: <strong>{money.format(Number(report.total_value))}</strong>
           </p>
