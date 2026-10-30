@@ -1,16 +1,16 @@
 """Invoice snapshots, history and document exports (FR-4.3, UC-15, Issue #26)."""
 
-import re
-import zlib
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from io import BytesIO
 from threading import Barrier
 from uuid import uuid4
 
 import pytest
 from alembic import command
+from pypdf import PdfReader
 from sqlalchemy import URL, create_engine, func, select, text
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.modules.audit._internal.models import AuditLog
@@ -27,10 +27,7 @@ from tests.test_returns import setup_sale_fixture
 
 
 def _pdf_text(content: bytes) -> str:
-    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", content, re.S)
-    return " ".join(
-        zlib.decompress(stream).decode("latin-1") for stream in streams if stream[:1] == b"x"
-    )
+    return " ".join(page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages)
 
 
 def test_fr4_3_ut_1_invoice_snapshot_is_available_with_the_sale(client, db):
@@ -151,6 +148,12 @@ def test_fr4_3_it_3_history_finds_a_seven_year_old_sale_by_date_and_number(clien
     assert response.json()["items"][0]["invoice_label"] == f"INV-{invoice.invoice_number:04d}"
     params["invoice"] = str(invoice.invoice_number)
     assert client.get("/api/sales/history", params=params).json()["total"] == 1
+
+
+def test_retention_rejects_deleting_a_recent_invoice(db, client):
+    _location, _product, _sale, invoice, _line, _serials = setup_sale_fixture(db, client)
+    with pytest.raises(IntegrityError, match="retention period"), db.begin_nested():
+        db.execute(text("DELETE FROM invoices WHERE id=:id"), {"id": invoice.id})
 
 
 def test_credit_note_snapshot_survives_product_rename_and_is_immutable(client, db):

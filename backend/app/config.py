@@ -4,6 +4,7 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,8 @@ class Settings(BaseSettings):
     return_window_days: int = 30
     store_name: str = "ESIMS Electronics"
     store_gstin: str | None = None
+    retention_years: int = Field(default=8, ge=8)
+    retention_archive_path: str = "/retention-archive"
 
 
 @lru_cache

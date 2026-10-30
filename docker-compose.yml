@@ -29,11 +29,14 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       SMTP_STARTTLS: "false"
+      RETENTION_YEARS: ${RETENTION_YEARS:-8}
+      RETENTION_ARCHIVE_PATH: /retention-archive
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - product-images:/data/product-images
+      - retention-archive:/retention-archive
     depends_on:
       db:
         condition: service_healthy
@@ -59,3 +62,4 @@ services:
 volumes:
   db-data:
   product-images:
+  retention-archive:
