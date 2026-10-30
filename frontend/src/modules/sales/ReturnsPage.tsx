@@ -5,11 +5,13 @@ import ConfirmDialog from '../../shell/components/ConfirmDialog';
 import { useAuth } from '../auth';
 import {
   salesApi,
+  type DocumentContent,
   type ReturnCreditNote,
   type ReturnInput,
   type SaleLookup,
   type SaleLookupLine,
 } from './api';
+import DocumentView from './DocumentView';
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
@@ -21,6 +23,30 @@ interface LineState {
 }
 
 const REASON_PRESETS = ['Changed mind', 'Defective - not sellable', 'Wrong item', 'Other'] as const;
+
+function creditNoteDocument(note: ReturnCreditNote): DocumentContent {
+  return (
+    note.content ?? {
+      kind: 'credit_note',
+      credit_note_number: note.credit_note_number,
+      created_at: note.created_at,
+      store_name: 'ESIMS Electronics',
+      location_name: note.location_name,
+      processor_name: note.processed_by_username,
+      refund_total: note.refund_total,
+      reason: note.reason,
+      lines: note.lines.map((line) => ({
+        id: line.id,
+        product_name: line.product_name,
+        sku: line.sku,
+        quantity: line.quantity,
+        refund_amount: line.refund_amount,
+        line_total: line.refund_amount,
+        serial_numbers: line.serial_numbers,
+      })),
+    }
+  );
+}
 
 export default function ReturnsPage() {
   const { user } = useAuth();
@@ -307,7 +333,9 @@ export default function ReturnsPage() {
               <strong>Credit Note:</strong> {creditNote.credit_note_number}
             </p>
             <p>
-              <strong>Invoice:</strong> INV-{String(creditNote.invoice_number).padStart(6, '0')}
+              <strong>Invoice:</strong>{' '}
+              {creditNote.content?.invoice_label ??
+                `INV-${String(creditNote.invoice_number).padStart(4, '0')}`}
             </p>
             <p>
               <strong>Location:</strong> {creditNote.location_name}
@@ -327,6 +355,11 @@ export default function ReturnsPage() {
               <strong>Reason:</strong> {creditNote.reason}
             </p>
           </div>
+
+          <DocumentView
+            document={creditNoteDocument(creditNote)}
+            pdfUrl={`/sales/returns/${creditNote.return_id}/pdf`}
+          />
 
           <table className="data-table" aria-label="Returned items">
             <thead>
@@ -371,7 +404,7 @@ export default function ReturnsPage() {
                   <input
                     {...control}
                     type="text"
-                    placeholder="e.g. 5002 or INV-005002"
+                    placeholder="e.g. 5002 or INV-5002"
                     value={invoiceInput}
                     onChange={(e) => {
                       setInvoiceInput(e.target.value);
@@ -395,7 +428,7 @@ export default function ReturnsPage() {
           <div className="sale-summary-card">
             <div className="summary-row">
               <div>
-                <strong>Invoice:</strong> INV-{String(sale.invoice.invoice_number).padStart(6, '0')}
+                <strong>Invoice:</strong> {sale.invoice.invoice_label}
               </div>
               <div>
                 <strong>Date:</strong> {new Date(sale.sold_at).toLocaleDateString()}
