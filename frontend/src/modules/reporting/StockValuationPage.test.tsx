@@ -1,4 +1,3 @@
-
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -99,14 +98,10 @@ test('shows valuation details and refreshes the report when filtering by locatio
   });
 
   expect(within(table).getAllByText('Phone (PHONE-1)')).toHaveLength(2);
-  expect(
-    within(table).getByText('PHONE-1-BLK — color: Black'),
-  ).toBeInTheDocument();
+  expect(within(table).getByText('PHONE-1-BLK — color: Black')).toBeInTheDocument();
   expect(within(table).getByText('Cost not set')).toBeInTheDocument();
 
-  expect(screen.getByText('Total inventory value:')).toHaveTextContent(
-    '₹300.00',
-  );
+  expect(screen.getByText('Total inventory value:')).toHaveTextContent('₹300.00');
 
   await user.selectOptions(screen.getByLabelText('Location'), '1');
 
@@ -124,13 +119,9 @@ test('shows an empty state when the selected location has no stock', async () =>
 
   renderPage();
 
-  expect(
-    await screen.findByText('No stock valuation data for this location.'),
-  ).toBeInTheDocument();
+  expect(await screen.findByText('No stock valuation data for this location.')).toBeInTheDocument();
 
-  expect(screen.getByText('Total inventory value:')).toHaveTextContent(
-    '₹0.00',
-  );
+  expect(screen.getByText('Total inventory value:')).toHaveTextContent('₹0.00');
 });
 
 test('shows report load errors', async () => {
@@ -141,18 +132,14 @@ test('shows report load errors', async () => {
         ok: url === '/api/stock/locations',
         status: url === '/api/stock/locations' ? 200 : 500,
         json: async () =>
-          url === '/api/stock/locations'
-            ? locations
-            : { detail: 'Report unavailable.' },
+          url === '/api/stock/locations' ? locations : { detail: 'Report unavailable.' },
       }),
     ),
   );
 
   renderPage();
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Report unavailable.',
-  );
+  expect(await screen.findByRole('alert')).toHaveTextContent('Report unavailable.');
 });
 
 test('exports the filtered report and shows a retryable error when the export fails', async () => {
@@ -184,8 +171,7 @@ test('exports the filtered report and shows a retryable error when the export fa
           ok: true,
           status: 200,
           headers: new Headers({
-            'Content-Disposition':
-              'attachment; filename="Stock_Valuation_Report_2026-09-07.csv"',
+            'Content-Disposition': 'attachment; filename="Stock_Valuation_Report_2026-09-07.csv"',
           }),
           blob: async () => new Blob(['x']),
         });
@@ -194,8 +180,7 @@ test('exports the filtered report and shows a retryable error when the export fa
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: async () =>
-          url === '/api/stock/locations' ? locations : allLocationsReport,
+        json: async () => (url === '/api/stock/locations' ? locations : allLocationsReport),
       });
     }),
   );

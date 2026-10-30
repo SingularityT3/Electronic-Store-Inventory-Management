@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api, downloadFile } from '../../api';
@@ -67,9 +66,7 @@ export default function StockValuationPage() {
     setLoading(true);
     setError('');
 
-    const filter = locationId
-      ? `?location_id=${encodeURIComponent(locationId)}`
-      : '';
+    const filter = locationId ? `?location_id=${encodeURIComponent(locationId)}` : '';
 
     Promise.all([
       api<Location[]>('/stock/locations'),
@@ -84,9 +81,7 @@ export default function StockValuationPage() {
         if (!active) return;
         setReport(null);
         setError(
-          cause instanceof ApiError
-            ? cause.message
-            : 'Could not load the stock valuation report.',
+          cause instanceof ApiError ? cause.message : 'Could not load the stock valuation report.',
         );
       })
       .finally(() => active && setLoading(false));
@@ -108,9 +103,7 @@ export default function StockValuationPage() {
       {
         header: 'Unit cost',
         cell: (item) =>
-          item.cost_not_set
-            ? <span>Cost not set</span>
-            : unitMoney.format(Number(item.unit_cost)),
+          item.cost_not_set ? <span>Cost not set</span> : unitMoney.format(Number(item.unit_cost)),
       },
       {
         header: 'Inventory value',
@@ -124,9 +117,7 @@ export default function StockValuationPage() {
     setExporting(true);
     setExportError('');
 
-    const filter = locationId
-      ? `&location_id=${encodeURIComponent(locationId)}`
-      : '';
+    const filter = locationId ? `&location_id=${encodeURIComponent(locationId)}` : '';
 
     try {
       await downloadFile(`/reporting/valuation/export?format=${format}${filter}`);
@@ -147,9 +138,7 @@ export default function StockValuationPage() {
     <div className="page">
       <header className="page-header">
         <h1>Stock valuation</h1>
-        <Link to="/reports/reorder">
-          Low-stock &amp; reorder report
-        </Link>
+        <Link to="/reports/reorder">Low-stock &amp; reorder report</Link>
       </header>
 
       {error && (
@@ -180,18 +169,10 @@ export default function StockValuationPage() {
           </FormField>
 
           <div role="group" aria-label="Export">
-            <button
-              type="button"
-              disabled={exporting}
-              onClick={() => exportReport('csv')}
-            >
+            <button type="button" disabled={exporting} onClick={() => exportReport('csv')}>
               Export CSV
             </button>{' '}
-            <button
-              type="button"
-              disabled={exporting}
-              onClick={() => exportReport('pdf')}
-            >
+            <button type="button" disabled={exporting} onClick={() => exportReport('pdf')}>
               Export PDF
             </button>
           </div>
@@ -203,19 +184,14 @@ export default function StockValuationPage() {
           )}
 
           <p>
-            Total inventory value:{' '}
-            <strong>
-              {money.format(Number(report.total_value))}
-            </strong>
+            Total inventory value: <strong>{money.format(Number(report.total_value))}</strong>
           </p>
 
           <DataTable
             caption="Stock valuation"
             columns={columns}
             rows={report.items}
-            rowKey={(item) =>
-              `${item.product_id}-${item.variant_id ?? 'base'}-${item.location_id}`
-            }
+            rowKey={(item) => `${item.product_id}-${item.variant_id ?? 'base'}-${item.location_id}`}
             emptyMessage="No stock valuation data for this location."
           />
         </>
