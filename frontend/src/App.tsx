@@ -16,7 +16,7 @@ import {
   ProductViewPage,
 } from './modules/product';
 import { PosPage, ReturnsPage } from './modules/sales';
-import { StockValuationPage } from './modules/reporting';
+import { LowStockReportPage, StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import {
   POReceivingPage,
@@ -94,6 +94,15 @@ export default function App() {
           element={
             <RequirePermission permission="products.manage" what="category management">
               <CategoryAttributesPage />
+            </RequirePermission>
+          }
+        />
+
+        <Route
+          path="/reports/reorder"
+          element={
+            <RequirePermission permission="reports.view" what="reports">
+              <LowStockReportPage />
             </RequirePermission>
           }
         />

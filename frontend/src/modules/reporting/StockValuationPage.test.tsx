@@ -1,5 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import StockValuationPage from './StockValuationPage';
 
 afterEach(() => {
@@ -49,10 +50,12 @@ const allLocationsReport = {
 
 function mockApi(report = allLocationsReport) {
   const calls: string[] = [];
+
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       calls.push(url);
+
       const body =
         url === '/api/stock/locations'
           ? locations
@@ -62,6 +65,7 @@ function mockApi(report = allLocationsReport) {
                 total_value: '300',
               }
             : report;
+
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -69,35 +73,54 @@ function mockApi(report = allLocationsReport) {
       });
     }),
   );
+
   return calls;
+}
+
+function renderPage() {
+  render(
+    <MemoryRouter>
+      <StockValuationPage />
+    </MemoryRouter>,
+  );
 }
 
 test('shows valuation details and refreshes the report when filtering by location', async () => {
   const calls = mockApi();
   const user = userEvent.setup();
-  render(<StockValuationPage />);
+
+  renderPage();
 
   expect(screen.getByText('Loading stock valuation…')).toBeInTheDocument();
-  const table = await screen.findByRole('table', { name: 'Stock valuation' });
+
+  const table = await screen.findByRole('table', {
+    name: 'Stock valuation',
+  });
+
   expect(within(table).getAllByText('Phone (PHONE-1)')).toHaveLength(2);
   expect(within(table).getByText('PHONE-1-BLK — color: Black')).toBeInTheDocument();
   expect(within(table).getByText('Cost not set')).toBeInTheDocument();
+
   expect(screen.getByText('Total inventory value:')).toHaveTextContent('₹300.00');
 
   await user.selectOptions(screen.getByLabelText('Location'), '1');
+
   await waitFor(() => {
     expect(calls).toContain('/api/reporting/valuation?location_id=1');
     expect(within(table).queryByText('Bengaluru')).not.toBeInTheDocument();
   });
+
   expect(calls).toContain('/api/reporting/valuation?location_id=1');
   expect(calls).toContain('/api/reporting/valuation');
 });
 
 test('shows an empty state when the selected location has no stock', async () => {
   mockApi({ items: [], total_value: '0' });
-  render(<StockValuationPage />);
+
+  renderPage();
 
   expect(await screen.findByText('No stock valuation data for this location.')).toBeInTheDocument();
+
   expect(screen.getByText('Total inventory value:')).toHaveTextContent('₹0.00');
 });
 
@@ -113,7 +136,8 @@ test('shows report load errors', async () => {
       }),
     ),
   );
-  render(<StockValuationPage />);
+
+  renderPage();
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Report unavailable.');
 });
@@ -121,16 +145,28 @@ test('shows report load errors', async () => {
 test('exports the filtered report and shows a retryable error when the export fails', async () => {
   const exportCalls: string[] = [];
   const createObjectURL = vi.fn(() => 'blob:report');
+
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-  vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+
+  vi.stubGlobal('URL', {
+    createObjectURL,
+    revokeObjectURL: vi.fn(),
+  });
+
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       if (url.includes('/export')) {
         exportCalls.push(url);
+
         if (exportCalls.length === 1) {
-          return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+          return Promise.resolve({
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+          });
         }
+
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -140,6 +176,7 @@ test('exports the filtered report and shows a retryable error when the export fa
           blob: async () => new Blob(['x']),
         });
       }
+
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -147,19 +184,28 @@ test('exports the filtered report and shows a retryable error when the export fa
       });
     }),
   );
+
   const user = userEvent.setup();
-  render(<StockValuationPage />);
+
+  // Use the router-wrapped render helper.
+  renderPage();
 
   await screen.findByRole('table', { name: 'Stock valuation' });
+
   await user.selectOptions(screen.getByLabelText('Location'), '1');
+
   await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+
   expect(await screen.findByRole('alert')).toHaveTextContent('Export failed');
 
   await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+
   await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+
   expect(exportCalls).toEqual([
     '/api/reporting/valuation/export?format=csv&location_id=1',
     '/api/reporting/valuation/export?format=csv&location_id=1',
   ]);
+
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

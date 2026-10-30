@@ -103,6 +103,15 @@ def test_alerts_are_location_scoped_and_align_with_reorder_report(client, make_u
 
     alerts = client.get("/api/notifications/alerts").json()
     assert {alert["location_id"] for alert in alerts} == {location.id}
+    report_rows = client.get(f"/api/reporting/reorder?location_id={location.id}").json()
+    assert [
+        (row["product_id"], row["location_id"], row["quantity"], row["reorder_threshold"])
+        for row in report_rows
+        if row["product_id"] == product.id
+    ] == [
+        (alert["product_id"], alert["location_id"], alert["quantity"], alert["threshold"])
+        for alert in alerts
+    ]
     reorder_positions = {
         (position.product_id, position.location_id)
         for position, _ in reorder_rows(db)

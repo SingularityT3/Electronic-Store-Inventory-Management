@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../../App';
@@ -79,7 +79,7 @@ function reply(status: number, body: unknown) {
   return Promise.resolve({ ok: status < 400, status, json: async () => body });
 }
 
-function renderPurchaseOrders(role: Role = 'manager') {
+function renderPurchaseOrders(role: Role = 'manager', initialPath = '/purchase-orders') {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal(
     'fetch',
@@ -105,7 +105,7 @@ function renderPurchaseOrders(role: Role = 'manager') {
   );
   render(
     <MemoryRouter
-      initialEntries={['/purchase-orders']}
+      initialEntries={[initialPath]}
       future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
     >
       <AuthProvider>
@@ -115,6 +115,39 @@ function renderPurchaseOrders(role: Role = 'manager') {
   );
   return calls;
 }
+
+test('reorder report links prefill a draft purchase order', async () => {
+  const user = userEvent.setup();
+  const calls = renderPurchaseOrders(
+    'manager',
+    '/purchase-orders?product_id=20&location_id=2&quantity=6&product_name=Phone&sku=PHONE-20',
+  );
+
+  expect(await screen.findByRole('heading', { name: 'Purchase orders' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Receiving location')).toHaveValue('2');
+  expect(screen.getByLabelText('Quantity PHONE-20')).toHaveValue(6);
+  expect(screen.getByText(/Reorder 6 unit\(s\) of Phone/)).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('Supplier'), String(SUPPLIER.id));
+  await waitFor(() => {
+    expect(screen.getByLabelText('Unit price PHONE-20')).toHaveValue(80);
+  });
+  await user.type(screen.getByLabelText('Expected delivery date'), '2026-11-12');
+  await user.click(screen.getByRole('button', { name: 'Create draft' }));
+
+  await waitFor(() => {
+    const createCall = calls.find(
+      (call) => call.url === '/api/purchasing/purchase-orders' && call.init?.method === 'POST',
+    );
+    expect(JSON.parse(String(createCall?.init?.body)).lines).toEqual([
+      {
+        product_id: CATALOG.product_id,
+        variant_id: null,
+        quantity_ordered: 6,
+        unit_price: '80.00',
+      },
+    ]);
+  });
+});
 
 test('creates a draft from supplier catalog prices, recalculates totals and submits it', async () => {
   const user = userEvent.setup();

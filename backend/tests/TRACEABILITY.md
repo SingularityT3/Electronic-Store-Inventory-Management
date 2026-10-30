@@ -206,8 +206,8 @@ Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
 | FR6.1-IT-1 | Automated | `test_plan_cases.py::test_fr2_4_it_2_adjustment_is_in_the_valuation_report` |  |
 | FR6.1-IT-2 | Pending |  | CSV and PDF export is #34 |
 | FR6.1-IT-3 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` |  |
-| FR6.1-ST-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_valuation` |  |
-| FR6.1-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_valuation` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
+| FR6.1-ST-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` |  |
+| FR6.1-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
 | FR6.2-UT-1 | Pending |  | Sales trend report is #31 |
 | FR6.2-UT-2 | Pending |  | Sales trend report is #31 |
 | FR6.2-UT-3 | Pending |  | Sales trend report is #31 |
@@ -219,11 +219,11 @@ Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
 | FR6.3-UT-1 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
 | FR6.3-UT-2 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
 | FR6.3-UT-3 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
-| FR6.3-IT-1 | Partial | `test_notifications.py::test_alerts_are_location_scoped_and_align_with_reorder_report` | PO receiving is not in main yet (#22); the report reads live stock |
+| FR6.3-IT-1 | Automated | `test_purchase_order_receiving.py::test_multiple_receipts_accumulate_and_short_items_remain_outstanding` | PO receipts are reflected through live stock |
 | FR6.3-IT-2 | Automated | `test_notifications.py::test_alerts_are_location_scoped_and_align_with_reorder_report` |  |
 | FR6.3-IT-3 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
-| FR6.3-ST-1 | Pending |  | Report screen and create-PO action are #32 |
-| FR6.3-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
+| FR6.3-ST-1 | Automated | `fe:modules/reporting/LowStockReportPage.test.tsx::low-stock report filters locations and links a prefilled PO` ; `fe:modules/purchasing/PurchaseOrdersPage.test.tsx::reorder report links prefill a draft purchase order` |  |
+| FR6.3-ST-2 | Automated | `test_reporting_stock.py::test_admin_can_access_reorder_report` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
 | FR6.4-UT-1 | Pending |  | Supplier performance report is #33 |
 | FR6.4-UT-2 | Pending |  | Supplier performance report is #33 |
 | FR6.4-UT-3 | Pending |  | Supplier performance report is #33 |

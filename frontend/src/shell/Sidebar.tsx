@@ -17,7 +17,7 @@ export default function Sidebar({ user }: { user: User }) {
           <ul aria-labelledby={`nav-${group.title}`}>
             {group.items.map((item) => (
               <li key={item.path}>
-                <NavLink to={item.path} end className="sidebar-link">
+                <NavLink to={item.path} end={item.path !== '/reports'} className="sidebar-link">
                   {item.label}
                 </NavLink>
               </li>

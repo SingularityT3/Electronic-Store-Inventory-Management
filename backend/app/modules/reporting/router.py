@@ -57,6 +57,7 @@ class ReorderItemOut(BaseModel):
     sku: str
     variant_id: int | None
     variant_sku: str | None
+    variant_attributes: dict[str, object] | None
     location_id: int
     location_name: str
     quantity: int
@@ -119,6 +120,7 @@ def reorder_report(
             sku=position.sku,
             variant_id=position.variant_id,
             variant_sku=position.variant_sku,
+            variant_attributes=position.variant_attributes,
             location_id=position.location_id,
             location_name=position.location_name,
             quantity=position.quantity,

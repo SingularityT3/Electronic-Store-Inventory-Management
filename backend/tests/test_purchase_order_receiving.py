@@ -180,6 +180,16 @@ def test_full_receipt_updates_stock_cost_history_audit_and_status_notifications(
 def test_multiple_receipts_accumulate_and_short_items_remain_outstanding(client, make_user, db):
     manager = signed_in(client, make_user, "manager")
     order, line, product, location, _supplier = create_order(db, manager, ordered=200)
+    db.add(
+        StockLevel(
+            product_id=product.id,
+            location_id=location.id,
+            quantity=0,
+            reorder_threshold=80,
+            reorder_to_level=100,
+        )
+    )
+    db.commit()
 
     first = client.post(
         f"/api/purchasing/purchase-orders/{order.id}/receive",
@@ -188,6 +198,10 @@ def test_multiple_receipts_accumulate_and_short_items_remain_outstanding(client,
     assert first.status_code == 200, first.text
     assert first.json()["status"] == "partially_received"
     assert first.json()["lines"][0]["quantity_outstanding"] == 125
+    low_stock_report = client.get("/api/reporting/reorder").json()
+    report_item = next(row for row in low_stock_report if row["product_id"] == product.id)
+    assert (report_item["quantity"], report_item["reorder_threshold"]) == (75, 80)
+    assert report_item["suggested_quantity"] == 25
 
     second = client.post(
         f"/api/purchasing/purchase-orders/{order.id}/receive",
@@ -196,6 +210,8 @@ def test_multiple_receipts_accumulate_and_short_items_remain_outstanding(client,
     assert second.status_code == 200, second.text
     assert second.json()["status"] == "received"
     assert second.json()["lines"][0]["quantity_received"] == 200
+    report_rows = client.get("/api/reporting/reorder").json()
+    assert all(row["product_id"] != product.id for row in report_rows)
     assert (
         db.scalar(
             select(StockLevel.quantity).where(
