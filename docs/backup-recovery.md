@@ -27,8 +27,9 @@ against losing the server or its disk. Do not leave it that way in production.
 ## Retention
 
 - every backup from the last **30 days** (`BACKUP_KEEP_DAILY_DAYS`);
-- then the first backup of each month for **96 months** (`BACKUP_KEEP_MONTHLY`), matching the 8-year
-  retention of sales and invoice records (SRS A-2, #27). Raise it if the retention period is raised.
+- then the first backup of each month for at least `RETENTION_YEARS x 12` months. The default is
+  **96 months** (`BACKUP_KEEP_MONTHLY`), matching the eight-year minimum in SRS A-2, #27. The backup
+  check rejects a lower configured value.
 
 Older backups are deleted after each successful run; the newest backup is never deleted. At about
 tens of MB per dump this stays small; check free space on the backup storage yearly.
@@ -74,7 +75,8 @@ built first (drill below: the restore itself takes seconds for a small database;
    ```
 
    It verifies the checksums first and restores in one transaction: if anything fails, the database
-   is unchanged. Files in the image volume that are not in the backup are left alone.
+   is unchanged. Files in the image volume that are not in the backup are left alone. Retention
+   triggers are part of the schema and return with the restored schema and migrations.
 4. Start everything: `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d`
    (migrations run on start and bring an older backup up to the current schema).
 5. Verify: `https://<SITE_ADDRESS>/api/health` is `ok`; log in; open Products and a recent sale or

@@ -31,6 +31,7 @@ docker compose run --rm backend python -m scripts.seed
 ```
 
 The schema and the rules it enforces are in [`docs/schema.md`](docs/schema.md).
+Record retention and the operator archive procedure are in [`docs/retention.md`](docs/retention.md).
 
 ## Test and lint
 

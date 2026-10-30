@@ -240,7 +240,11 @@ long item names wrap, amounts align to the right and each page is numbered.
 credit-note summaries. PDF exports are at `/api/sales/invoices/{invoice_number}/pdf` and
 `/api/sales/returns/{return_id}/pdf`; successful exports are audited. Return status is an annotation
 (`Partially Returned` or `Fully Returned`) and never changes the original invoice snapshot.
-Retention and deletion policy remain #27; this feature adds no invoice delete path.
+  Retention and deletion policy is enforced by migration 0013; the app has no invoice delete path.
+
+## Transaction retention (#27)
+
+Sales, returns, invoices, and their child/link records are retained at least eight calendar years. Database triggers block early row deletion, all truncation, and changes to clock dates; `RETENTION_YEARS` may raise the policy for the operator archive tool. The database trigger floor is eight years. `scripts.retention` reports and archives expired sale bundles after backup verification; archiving is operator-only. Full database backups include these records and must be retained at least `RETENTION_YEARS x 12` months. See [`retention.md`](retention.md).
 
 ## Product catalog
 

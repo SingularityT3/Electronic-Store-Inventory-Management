@@ -60,6 +60,8 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `STORE_NAME` | Store name printed on invoice and credit note snapshots; defaults to `ESIMS Electronics`. |
 | `STORE_GSTIN` | Optional GST registration number printed on invoice and credit note snapshots. |
 | `RETURN_WINDOW_DAYS` | Customer return window in days (SRS A-1); defaults to `30`. Sales older than this number of calendar days require a Manager override to return. Day boundaries are evaluated in UTC. |
+| `RETENTION_YEARS` | Minimum record retention; defaults to `8` calendar years and cannot be lower. Confirm local tax/GST requirements before go-live. |
+| `RETENTION_ARCHIVE_PATH` | Operator archive directory in the backend container; defaults to `/retention-archive`, backed by a Docker volume. |
 
 Never commit `.env.prod` (it is git-ignored).
 
