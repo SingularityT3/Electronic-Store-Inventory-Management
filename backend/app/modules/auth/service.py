@@ -85,3 +85,68 @@ def po_status_notification_recipients(db: Session, *, created_by_id: int) -> lis
             .order_by(User.id)
         )
     )
+
+
+class ManagerApprovalError(Exception):
+    """Raised when manager override authentication or permission check fails."""
+
+
+def verify_override(
+    db: Session,
+    *,
+    username: str,
+    password: str,
+    permission: Permission,
+    actor_id: int,
+    actor_username: str,
+    settings: object,
+    now: object,
+) -> CurrentUser:
+    """Verify Manager/Admin override credentials for late returns (SRS A-11)."""
+    from app.config import Settings
+    from app.modules.auth._internal.login import LoginStatus, _audit, authenticate
+    from app.modules.auth._internal.permissions import has_permission
+
+    assert isinstance(settings, Settings)
+    outcome = authenticate(db, username, password, settings, now)  # type: ignore[arg-type]
+    if outcome.status is not LoginStatus.OK or outcome.user is None:
+        _audit(
+            db,
+            "override_failed",
+            outcome.user,
+            username,
+            (
+                f"Manager approval failed for username '{username[:150]}' "
+                f"attempted by processor '{actor_username}'"
+            ),
+        )
+        db.commit()
+        raise ManagerApprovalError("Manager approval failed.")
+
+    if not has_permission(outcome.user.role, permission):
+        _audit(
+            db,
+            "override_failed",
+            outcome.user,
+            username,
+            (
+                f"Manager approval failed: user '{outcome.user.username}' "
+                f"(role {outcome.user.role}) lacks {permission} "
+                f"(attempted by processor '{actor_username}')"
+            ),
+        )
+        db.commit()
+        raise ManagerApprovalError("Manager approval failed.")
+
+    return CurrentUser(
+        id=outcome.user.id,
+        username=outcome.user.username,
+        full_name=outcome.user.full_name,
+        role=outcome.user.role,
+        location_id=outcome.user.location_id,
+    )
+
+
+def username_by_id(db: Session, user_id: int) -> str | None:
+    """Resolve a user ID to a username."""
+    return db.scalar(select(User.username).where(User.id == user_id))

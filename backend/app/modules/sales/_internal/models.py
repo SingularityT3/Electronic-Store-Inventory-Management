@@ -163,11 +163,13 @@ class ReturnLine(Base):
     quantity: Mapped[int]
     condition: Mapped[str] = mapped_column(String(20))
     restocked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    refund_amount: Mapped[Decimal] = mapped_column(Money, server_default=text("0"))
 
     __table_args__ = (
         CheckConstraint("quantity > 0", name="quantity_positive"),
         CheckConstraint("condition IN ('resaleable', 'damaged')", name="condition"),
         CheckConstraint("condition = 'resaleable' OR NOT restocked", name="damaged_not_restocked"),
+        CheckConstraint("refund_amount >= 0", name="refund_amount_non_negative"),
     )
 
 

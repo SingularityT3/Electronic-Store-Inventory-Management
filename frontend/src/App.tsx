@@ -1,3 +1,4 @@
+
 import { Route, Routes } from 'react-router-dom';
 import { AuditLogPage } from './modules/audit';
 import {
@@ -15,7 +16,7 @@ import {
   ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
-import { PosPage } from './modules/sales';
+import { PosPage, ReturnsPage } from './modules/sales';
 import { LowStockReportPage, StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import {
@@ -132,6 +133,8 @@ export default function App() {
               <StockTransferPage />
             ) : item.path === '/sales' ? (
               <PosPage />
+            ) : item.path === '/returns' ? (
+              <ReturnsPage />
             ) : item.path === '/categories' ? (
               <CategoriesPage />
             ) : item.path === '/suppliers' ? (
