@@ -1262,3 +1262,8 @@ def location_exists(db: Session, location_id: int) -> bool:
         )
         is not None
     )
+
+
+def location_name(db: Session, location_id: int) -> str | None:
+    """Return an active location's name, for labelling report filters."""
+    return db.scalar(select(Location.name).where(Location.id == location_id, Location.is_active))

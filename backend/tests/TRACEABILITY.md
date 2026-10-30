@@ -12,7 +12,7 @@ Status:
 
 Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend/src`. Tests written for this table are named after their ID (`test_fr1_1_it_3_...` in `test_plan_cases.py`).
 
-Totals: 226 cases, 129 automated, 13 partial, 1 manual, 83 pending.
+Totals: 226 cases, 136 automated, 14 partial, 1 manual, 75 pending.
 
 
 ## 3.1 Product Management
@@ -196,7 +196,7 @@ Totals: 226 cases, 129 automated, 13 partial, 1 manual, 83 pending.
 
 ## 3.6 Reporting and Analytics
 
-40 cases: 13 automated, 1 partial, 26 pending.
+40 cases: 20 automated, 2 partial, 18 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -232,14 +232,14 @@ Totals: 226 cases, 129 automated, 13 partial, 1 manual, 83 pending.
 | FR6.4-IT-3 | Pending |  | Supplier performance report is #33 |
 | FR6.4-ST-1 | Pending |  | Supplier performance report is #33 |
 | FR6.4-ST-2 | Pending |  | Supplier performance report is #33 |
-| FR6.5-UT-1 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-UT-2 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-UT-3 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-IT-1 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-IT-2 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-IT-3 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-ST-1 | Pending |  | CSV and PDF export is #34 |
-| FR6.5-ST-2 | Pending |  | CSV and PDF export is #34 |
+| FR6.5-UT-1 | Automated | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` ; `test_reporting_export.py::test_fr6_5_csv_matches_the_on_screen_valuation` |  |
+| FR6.5-UT-2 | Automated | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` |  |
+| FR6.5-UT-3 | Automated | `test_reporting_export.py::test_fr6_5_ut_3_commas_and_quotes_stay_in_one_cell` |  |
+| FR6.5-IT-1 | Partial | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` | Covers the valuation and reorder reports; sales trend (#31) and supplier performance (#33) are not in `main` yet |
+| FR6.5-IT-2 | Automated | `test_reporting_export.py::test_fr6_5_it_2_pdf_header_has_title_time_and_filter` |  |
+| FR6.5-IT-3 | Automated | `test_reporting_export.py::test_fr6_5_it_3_five_thousand_rows_export_without_truncation` |  |
+| FR6.5-ST-1 | Automated | `test_reporting_export.py::test_fr6_5_st_1_export_is_denied_where_the_report_is_denied` |  |
+| FR6.5-ST-2 | Automated | `test_reporting_export.py::test_fr6_5_st_2_file_name_has_report_type_and_date` |  |
 
 ## 3.7 Search and Filter
 
