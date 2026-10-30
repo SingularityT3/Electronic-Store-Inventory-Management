@@ -1,32 +1,38 @@
 """HTTP routes for recording sales and reading receipt data."""
 
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_session
+from app.modules.audit import audit_service
 from app.modules.auth import (
     CurrentUser,
     ManagerApprovalError,
     Permission,
     authorize_location,
     require,
+    user_full_names,
 )
 from app.modules.sales._internal.models import (
     Invoice,
     Payment,
+    Return,
+    ReturnLine,
     ReturnLineBatch,
     Sale,
     SaleLine,
     SaleLineBatch,
     SaleLineSerial,
 )
+from app.modules.sales.documents import Document, document_pdf
 from app.modules.sales.service import (
     InvoiceNotFoundError,
     PaymentInput,
@@ -38,6 +44,7 @@ from app.modules.sales.service import (
     SaleTrackingError,
     get_credit_note,
     get_sale_return_status,
+    invoice_label,
     lookup_sale_by_invoice,
     parse_invoice_number,
     process_return,
@@ -45,6 +52,7 @@ from app.modules.sales.service import (
 )
 from app.modules.stock import (
     batch_stock_positions,
+    location_details_many,
     location_exists,
     serial_number_labels,
     stock_positions,
@@ -109,8 +117,10 @@ class PaymentOut(BaseModel):
 
 class InvoiceOut(BaseModel):
     invoice_number: int
+    invoice_label: str = ""
     issued_at: datetime
     total: Decimal
+    content: dict[str, object] = Field(default_factory=dict)
 
 
 class SaleOut(BaseModel):
@@ -218,6 +228,39 @@ class ReturnCreditNoteOut(BaseModel):
     refund_total: Decimal
     non_sellable_quantity: int
     lines: list[ReturnCreditNoteLineOut]
+    content: dict[str, object] = Field(default_factory=dict)
+
+
+class SalesHistoryItemOut(BaseModel):
+    sale_id: int
+    invoice_number: int
+    invoice_label: str
+    sold_at: datetime
+    cashier_name: str
+    location_id: int
+    location_name: str
+    total: Decimal
+    return_status: Literal["none", "partially_returned", "fully_returned"]
+
+
+class SalesHistoryOut(BaseModel):
+    items: list[SalesHistoryItemOut]
+    total: int
+    page: int
+    page_size: int
+
+
+class CreditNoteSummaryOut(BaseModel):
+    credit_note_number: str
+    return_id: int
+    created_at: datetime
+    refund_total: Decimal
+
+
+class InvoiceDocumentOut(BaseModel):
+    content: dict[str, object]
+    return_status: Literal["none", "partially_returned", "fully_returned"]
+    credit_notes: list[CreditNoteSummaryOut]
 
 
 class BatchLocationOut(BaseModel):
@@ -297,8 +340,10 @@ def _sale_out(db: Session, sale: Sale) -> SaleOut:
         ],
         invoice=InvoiceOut(
             invoice_number=invoice.invoice_number,
+            invoice_label=invoice_label(invoice.invoice_number),
             issued_at=invoice.issued_at,
             total=invoice.total,
+            content=invoice.content,
         ),
         return_status=get_sale_return_status(db, sale.id),
     )
@@ -526,8 +571,10 @@ def get_sale_by_invoice(
         payments=[PaymentOut.model_validate(p, from_attributes=True) for p in data.payments],
         invoice=InvoiceOut(
             invoice_number=data.invoice.invoice_number,
+            invoice_label=invoice_label(data.invoice.invoice_number),
             issued_at=data.invoice.issued_at,
             total=data.invoice.total,
+            content=data.invoice.content,
         ),
         return_status=data.return_status,
         days_since_sale=data.days_since_sale,
@@ -618,6 +665,211 @@ def get_return(
     credit_note = get_credit_note(db, return_id)
     authorize_location(db, user, credit_note.location_id, "Read credit note")
     return ReturnCreditNoteOut.model_validate(credit_note, from_attributes=True)
+
+
+@router.get("/history", response_model=SalesHistoryOut)
+def sales_history(
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+    invoice: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+    return_status: Literal["none", "partially_returned", "fully_returned"] | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> SalesHistoryOut:
+    returned_qty = (
+        select(func.coalesce(func.sum(ReturnLine.quantity), 0))
+        .join(SaleLine, SaleLine.id == ReturnLine.sale_line_id)
+        .where(SaleLine.sale_id == Sale.id)
+        .correlate(Sale)
+        .scalar_subquery()
+    )
+    sold_qty = (
+        select(func.coalesce(func.sum(SaleLine.quantity), 0))
+        .where(SaleLine.sale_id == Sale.id)
+        .correlate(Sale)
+        .scalar_subquery()
+    )
+    status_expr = case(
+        (returned_qty == 0, "none"),
+        (returned_qty >= sold_qty, "fully_returned"),
+        else_="partially_returned",
+    )
+    query = select(Sale, Invoice.invoice_number, status_expr, func.count().over()).join(
+        Invoice, Invoice.sale_id == Sale.id
+    )
+    if not user.sees_all_locations:
+        if user.location_id is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "A location assignment is required.")
+        query = query.where(Sale.location_id == user.location_id)
+    else:
+        if location_id is not None:
+            query = query.where(Sale.location_id == location_id)
+    if invoice:
+        search = invoice.strip().upper()
+        if search.startswith("INV-"):
+            search = search[4:].strip()
+        if search:
+            raw_number = cast(Invoice.invoice_number, String)
+            padded_number = func.lpad(raw_number, 4, "0")
+            pattern = f"%{search}%"
+            query = query.where(or_(raw_number.ilike(pattern), padded_number.ilike(pattern)))
+    if date_from:
+        query = query.where(Sale.sold_at >= datetime.combine(date_from, time.min, tzinfo=UTC))
+    if date_to:
+        query = query.where(
+            Sale.sold_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+        )
+    if return_status:
+        query = query.where(status_expr == return_status)
+    rows = db.execute(
+        query.order_by(Sale.sold_at.desc(), Sale.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    sale_ids = [row[0].cashier_id for row in rows]
+    location_ids = [row[0].location_id for row in rows]
+    cashier_names = user_full_names(db, sale_ids)
+    location_names = location_details_many(db, location_ids)
+    total = int(rows[0][3]) if rows else 0
+    return SalesHistoryOut(
+        items=[
+            SalesHistoryItemOut(
+                sale_id=sale.id,
+                invoice_number=number,
+                invoice_label=invoice_label(number),
+                sold_at=sale.sold_at,
+                cashier_name=cashier_names.get(sale.cashier_id, f"User {sale.cashier_id}"),
+                location_id=sale.location_id,
+                location_name=(
+                    location_names.get(sale.location_id) or (f"Location {sale.location_id}", None)
+                )[0],
+                total=sale.total,
+                return_status=state,
+            )
+            for sale, number, state, _ in rows
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/invoices/{invoice_number}", response_model=InvoiceDocumentOut)
+def get_invoice_document(
+    invoice_number: str,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+) -> InvoiceDocumentOut:
+    number = parse_invoice_number(invoice_number)
+    inv = db.scalar(select(Invoice).where(Invoice.invoice_number == number)) if number else None
+    if inv is None or not inv.content or not inv.content.get("lines"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    sale = db.get(Sale, inv.sale_id)
+    if sale is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    authorize_location(db, user, sale.location_id, "Read invoice")
+    state = get_sale_return_status(db, sale.id)
+    notes = db.execute(
+        select(Return, Return.content)
+        .where(Return.sale_id == sale.id)
+        .order_by(Return.created_at, Return.id)
+    ).all()
+    return InvoiceDocumentOut(
+        content=inv.content,
+        return_status=state,
+        credit_notes=[
+            CreditNoteSummaryOut(
+                credit_note_number=ret.content.get("credit_note_number", f"CN-{ret.id:04d}"),
+                return_id=ret.id,
+                created_at=ret.created_at,
+                refund_total=ret.refund_total,
+            )
+            for ret, _ in notes
+        ],
+    )
+
+
+def _pdf_response(
+    db: Session, user: CurrentUser, document: Document, filename: str, action: str, entity_id: str
+) -> Response:
+    try:
+        content = document_pdf(document)
+    except Exception:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "Could not generate the PDF. You can try again or view the invoice on screen.",
+        ) from None
+    audit_service.record(
+        db,
+        module="sales",
+        action=action,
+        user_id=user.id,
+        username=user.username,
+        entity_type="invoice" if action == "invoice_pdf_exported" else "credit_note",
+        entity_id=entity_id,
+        details=f"Exported {filename}.",
+    )
+    db.commit()
+    return Response(
+        content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get("/invoices/{invoice_number}/pdf")
+def get_invoice_pdf(
+    invoice_number: str,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+) -> Response:
+    number = parse_invoice_number(invoice_number)
+    inv = db.scalar(select(Invoice).where(Invoice.invoice_number == number)) if number else None
+    if inv is None or not inv.content or not inv.content.get("lines"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    sale = db.get(Sale, inv.sale_id)
+    if sale is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invoice not found")
+    authorize_location(db, user, sale.location_id, "Export invoice")
+    state = get_sale_return_status(db, sale.id)
+    annotation = {
+        "partially_returned": "Partially Returned",
+        "fully_returned": "Fully Returned",
+    }.get(state)
+    label = invoice_label(inv.invoice_number)
+    return _pdf_response(
+        db,
+        user,
+        Document("invoice", inv.content, annotation),
+        f"invoice-{label}.pdf",
+        "invoice_pdf_exported",
+        str(inv.id),
+    )
+
+
+@router.get("/returns/{return_id}/pdf")
+def get_credit_note_pdf(
+    return_id: int,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.SALES_RECORD))],
+) -> Response:
+    note = get_credit_note(db, return_id)
+    authorize_location(db, user, note.location_id, "Export credit note")
+    filename = f"credit-note-{note.credit_note_number}.pdf"
+    return _pdf_response(
+        db,
+        user,
+        Document("credit_note", note.content),
+        filename,
+        "credit_note_pdf_exported",
+        str(return_id),
+    )
 
 
 @router.get("/{sale_id}", response_model=SaleOut)
