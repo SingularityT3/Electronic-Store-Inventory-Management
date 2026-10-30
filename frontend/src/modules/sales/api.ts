@@ -34,7 +34,13 @@ export interface Sale {
     line_total: string;
   }[];
   payments: { id: number; method: string; amount: string; reference: string | null }[];
-  invoice: { invoice_number: number; issued_at: string; total: string };
+  invoice: {
+    invoice_number: number;
+    invoice_label: string;
+    issued_at: string;
+    total: string;
+    content: DocumentContent;
+  };
   return_status?: 'none' | 'partially_returned' | 'fully_returned';
 }
 
@@ -76,6 +82,7 @@ export interface SaleLookup {
   return_status: 'none' | 'partially_returned' | 'fully_returned';
   invoice: {
     invoice_number: number;
+    invoice_label: string;
     issued_at: string;
     total: string;
   };
@@ -129,6 +136,76 @@ export interface ReturnCreditNote {
   refund_total: string;
   non_sellable_quantity: number;
   lines: ReturnCreditNoteLine[];
+  content?: DocumentContent;
+}
+
+export interface DocumentContent {
+  kind: 'invoice' | 'credit_note';
+  invoice_number?: number;
+  invoice_label?: string;
+  credit_note_number?: string;
+  return_id?: number;
+  issued_at?: string;
+  created_at?: string;
+  store_name: string;
+  store_gstin?: string | null;
+  location_name: string;
+  location_address?: string | null;
+  cashier_id?: number;
+  cashier_name?: string;
+  processor_name?: string;
+  customer_name?: string | null;
+  gst_rate?: string;
+  subtotal?: string;
+  discount_total?: string;
+  tax_total?: string;
+  total?: string;
+  refund_total?: string;
+  reason?: string;
+  lines: {
+    id?: number;
+    product_name: string;
+    sku: string;
+    variant_label?: string | null;
+    quantity: number;
+    unit_price?: string;
+    discount?: string;
+    tax?: string;
+    line_total?: string;
+    refund_amount?: string;
+    serial_numbers?: string[];
+  }[];
+  payments?: { method: string; amount: string; reference?: string | null }[];
+}
+
+export interface InvoiceDocument {
+  content: DocumentContent;
+  return_status: 'none' | 'partially_returned' | 'fully_returned';
+  credit_notes: {
+    credit_note_number: string;
+    return_id: number;
+    created_at: string;
+    refund_total: string;
+  }[];
+}
+
+export interface SalesHistoryItem {
+  sale_id: number;
+  invoice_number: number;
+  invoice_label: string;
+  sold_at: string;
+  cashier_name: string;
+  location_id: number;
+  location_name: string;
+  total: string;
+  return_status: 'none' | 'partially_returned' | 'fully_returned';
+}
+
+export interface SalesHistory {
+  items: SalesHistoryItem[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export const salesApi = {
@@ -144,4 +221,7 @@ export const salesApi = {
   processReturn: (body: ReturnInput) =>
     api<ReturnCreditNote>('/sales/returns', { method: 'POST', body }),
   getCreditNote: (returnId: number) => api<ReturnCreditNote>(`/sales/returns/${returnId}`),
+  getInvoiceDocument: (invoiceNumber: string | number) =>
+    api<InvoiceDocument>(`/sales/invoices/${encodeURIComponent(String(invoiceNumber))}`),
+  history: (params: URLSearchParams) => api<SalesHistory>(`/sales/history?${params}`),
 };

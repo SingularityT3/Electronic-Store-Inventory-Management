@@ -8,6 +8,151 @@ body {
   margin: 0;
 }
 
+.document-view {
+  max-width: 56rem;
+  margin: 1rem auto;
+}
+.document-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.document-sheet {
+  padding: 2rem;
+  background: #fff;
+  color: #111827;
+  border: 1px solid #d1d5db;
+}
+.document-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  border-bottom: 2px solid #111827;
+  padding-bottom: 1rem;
+}
+.document-header h1,
+.document-header h2,
+.document-header p {
+  margin: 0 0 0.35rem;
+}
+.document-number {
+  text-align: right;
+}
+.document-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.document-lines {
+  table-layout: fixed;
+}
+.document-lines th:first-child,
+.document-lines td:first-child {
+  width: 42%;
+  overflow-wrap: anywhere;
+}
+.document-lines tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.document-totals {
+  width: min(100%, 24rem);
+  margin: 1rem 0 1rem auto;
+}
+.document-totals div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+.document-totals dd {
+  margin: 0;
+}
+.document-grand-total {
+  border-top: 1px solid #111827;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.document-footer {
+  margin-top: 2rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #d1d5db;
+  text-align: center;
+}
+.sales-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.sales-history-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.sales-history-filters input,
+.sales-history-filters select {
+  padding: 0.45rem;
+}
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.badge.warning {
+  color: #854d0e;
+  background: #fef3c7;
+}
+.badge.danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .document-view,
+  .document-view * {
+    visibility: visible !important;
+  }
+  .document-view {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+  .document-actions,
+  .document-download-error {
+    display: none !important;
+  }
+  .document-sheet {
+    border: 0;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+  .document-lines thead {
+    display: table-header-group;
+  }
+  .document-lines tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .document-totals {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
 .auth-page {
   min-height: 100vh;
   display: grid;

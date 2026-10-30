@@ -121,6 +121,13 @@ export const NAV_ITEMS: NavItem[] = [
     deniedLabel: 'returns',
   },
   {
+    path: '/sales/history',
+    label: 'Sales history',
+    group: 'Sales and returns',
+    permission: 'sales.record',
+    deniedLabel: 'sales history',
+  },
+  {
     path: '/reports',
     label: 'Reports',
     group: 'Reporting',

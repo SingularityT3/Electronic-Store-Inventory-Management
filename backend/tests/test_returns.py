@@ -158,7 +158,6 @@ def setup_sale_fixture(
     if backdate_days > 0:
         backdated = datetime.now(UTC) - timedelta(days=backdate_days)
         sale.sold_at = backdated
-        invoice.issued_at = backdated
         db.commit()
 
     return location, product, sale, invoice, sale_line, serials_sold

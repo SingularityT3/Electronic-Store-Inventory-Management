@@ -57,6 +57,8 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `SMTP_*`            | Mail server for password reset links. If `SMTP_HOST` is empty, reset emails are not sent and an Admin must reset passwords (#7). |
 | `PRODUCT_IMAGE_MAX_BYTES` | Maximum upload size in bytes; defaults to 5 MiB, and must be at least 2 MiB for the required product-image test. |
 | `GST_RATE` | Percentage applied to each discounted sale line; defaults to `18` (18% GST). |
+| `STORE_NAME` | Store name printed on invoice and credit note snapshots; defaults to `ESIMS Electronics`. |
+| `STORE_GSTIN` | Optional GST registration number printed on invoice and credit note snapshots. |
 | `RETURN_WINDOW_DAYS` | Customer return window in days (SRS A-1); defaults to `30`. Sales older than this number of calendar days require a Manager override to return. Day boundaries are evaluated in UTC. |
 
 Never commit `.env.prod` (it is git-ignored).

@@ -150,3 +150,23 @@ def verify_override(
 def username_by_id(db: Session, user_id: int) -> str | None:
     """Resolve a user ID to a username."""
     return db.scalar(select(User.username).where(User.id == user_id))
+
+
+def user_full_name(db: Session, user_id: int) -> str | None:
+    """Resolve a user ID to their full name (falling back to username if empty)."""
+    row = db.execute(select(User.full_name, User.username).where(User.id == user_id)).first()
+    if row:
+        return row[0] or row[1]
+    return None
+
+
+def user_full_names(db: Session, user_ids: list[int]) -> dict[int, str]:
+    """Resolve names for a page of users in one query."""
+    if not user_ids:
+        return {}
+    return {
+        user_id: name or username
+        for user_id, name, username in db.execute(
+            select(User.id, User.full_name, User.username).where(User.id.in_(user_ids))
+        )
+    }

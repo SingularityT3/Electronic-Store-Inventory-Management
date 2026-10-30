@@ -101,6 +101,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'PO receiving',
     'Sales',
     'Returns',
+    'Sales history',
     'Reports',
     'User management',
     'Audit log',
@@ -120,6 +121,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'PO receiving',
     'Sales',
     'Returns',
+    'Sales history',
     'Reports',
   ],
   staff: [
@@ -130,7 +132,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'Stock transfer',
     'PO receiving',
   ],
-  cashier: ['Dashboard', 'Product search', 'Sales', 'Returns'],
+  cashier: ['Dashboard', 'Product search', 'Sales', 'Returns', 'Sales history'],
 };
 
 test.each(Object.keys(EXPECTED_MENU) as Role[])(

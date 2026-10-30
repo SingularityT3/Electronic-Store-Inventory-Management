@@ -3,7 +3,8 @@ import { ApiError, api } from '../../api';
 import { useAuth } from '../auth';
 import { productApi, type Product } from '../product/api';
 import { EmptyState, FormField, SearchBox } from '../../shell/components';
-import { salesApi, type Availability, type Sale } from './api';
+import { salesApi, type Availability, type DocumentContent, type Sale } from './api';
+import DocumentView from './DocumentView';
 
 const money = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 const GST_RATE = 18;
@@ -45,6 +46,7 @@ export default function PosPage() {
   const [received, setReceived] = useState('');
   const [reference, setReference] = useState('');
   const [sale, setSale] = useState<Sale | null>(null);
+  const [invoiceContent, setInvoiceContent] = useState<DocumentContent | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -180,6 +182,7 @@ export default function PosPage() {
         idempotency_key: idempotencyKey,
       });
       setSale(result);
+      setInvoiceContent(result.invoice.content);
     } catch (cause: unknown) {
       if (cause instanceof ApiError && cause.status === 409) {
         const messages = cause.fields;
@@ -203,13 +206,21 @@ export default function PosPage() {
     return (
       <div className="page">
         <h1>Sale recorded</h1>
-        <p>Invoice number: {sale.invoice.invoice_number}</p>
         <p>{new Date(sale.sold_at).toLocaleString()}</p>
         <p>Total: {money.format(Number(sale.total))}</p>
+        {invoiceContent ? (
+          <DocumentView
+            document={invoiceContent}
+            pdfUrl={`/sales/invoices/${encodeURIComponent(sale.invoice.invoice_label)}/pdf`}
+          />
+        ) : (
+          <p role="status">Loading invoice…</p>
+        )}
         <button
           type="button"
           onClick={() => {
             setSale(null);
+            setInvoiceContent(null);
             setCart([]);
             setIdempotencyKey(crypto.randomUUID());
             setPaymentAmount('');

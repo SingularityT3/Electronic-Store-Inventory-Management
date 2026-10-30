@@ -1268,3 +1268,27 @@ def location_exists(db: Session, location_id: int) -> bool:
 def location_name(db: Session, location_id: int) -> str | None:
     """Return an active location's name, for labelling report filters."""
     return db.scalar(select(Location.name).where(Location.id == location_id, Location.is_active))
+
+
+def location_details(db: Session, location_id: int) -> tuple[str, str | None] | None:
+    """Return a location's name and address for invoice/receipt documents."""
+    row = db.execute(
+        select(Location.name, Location.address).where(Location.id == location_id)
+    ).first()
+    return (row[0], row[1]) if row else None
+
+
+def location_details_many(
+    db: Session, location_ids: list[int]
+) -> dict[int, tuple[str, str | None]]:
+    """Resolve location names and addresses for a page in one query."""
+    if not location_ids:
+        return {}
+    return {
+        location_id: (name, address)
+        for location_id, name, address in db.execute(
+            select(Location.id, Location.name, Location.address).where(
+                Location.id.in_(location_ids)
+            )
+        )
+    }

@@ -38,6 +38,7 @@ class ProductStockItem:
 class SaleProduct:
     product_id: int
     product_name: str
+    sku: str
     product_active: bool
     has_active_variants: bool
     variant_id: int | None
@@ -164,6 +165,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
             return SaleProduct(
                 product_id,
                 product.name,
+                product.sku,
                 product.is_active,
                 True,
                 None,
@@ -176,6 +178,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
         return SaleProduct(
             product_id,
             product.name,
+            product.sku,
             product.is_active,
             False,
             None,
@@ -196,6 +199,7 @@ def sale_product(db: Session, product_id: int, variant_id: int | None) -> SalePr
     return SaleProduct(
         product_id,
         product.name,
+        product.sku,
         product.is_active,
         has_active_variants,
         variant.id,

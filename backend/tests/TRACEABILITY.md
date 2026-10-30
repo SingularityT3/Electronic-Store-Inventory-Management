@@ -12,7 +12,7 @@ Status:
 
 Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend/src`. Tests written for this table are named after their ID (`test_fr1_1_it_3_...` in `test_plan_cases.py`).
 
-Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
+Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 
 
 ## 3.1 Product Management
@@ -134,7 +134,7 @@ Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
 
 ## 3.4 Sales / Orders
 
-24 cases: 6 automated, 2 partial, 16 pending.
+24 cases: 9 automated, 5 partial, 10 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -154,14 +154,14 @@ Totals: 226 cases, 143 automated, 14 partial, 1 manual, 68 pending.
 | FR4.2-IT-3 | Pending | `test_returns.py::test_fr4_2_it_3_net_sales_data_aggregatable` | Sales trend report is #31; test confirms return data supports netting |
 | FR4.2-ST-1 | Partial | `test_returns.py::test_fr4_2_st_1_end_to_end_sale_to_return` | End-to-end return automated through API; sales trend netting is pending #31 |
 | FR4.2-ST-2 | Automated | `test_returns.py::test_authorization_and_location_scoping` |  |
-| FR4.3-UT-1 | Pending |  | Invoices are not in main yet (#26) |
-| FR4.3-UT-2 | Pending |  | Invoices are not in main yet (#26) |
-| FR4.3-UT-3 | Pending |  | Invoices are not in main yet (#26) |
-| FR4.3-IT-1 | Pending |  | Invoices are not in main yet (#26) |
-| FR4.3-IT-2 | Pending |  | Invoices are not in main yet (#26) |
-| FR4.3-IT-3 | Pending |  | Retention rules are #27 |
-| FR4.3-ST-1 | Partial | `test_constraints.py::test_invoice_numbers_unique_and_sequential` | Numbering is enforced by the database; Invoices are not in main yet (#26) |
-| FR4.3-ST-2 | Pending |  | Invoices are not in main yet (#26) |
+| FR4.3-UT-1 | Automated | `test_invoices.py::test_fr4_3_ut_1_invoice_snapshot_is_available_with_the_sale` |  |
+| FR4.3-UT-2 | Automated | `test_invoices.py::test_fr4_3_ut_2_sale_persists_required_invoice_snapshot` |  |
+| FR4.3-UT-3 | Partial | `test_invoices.py::test_fr4_3_ut_2_sale_persists_required_invoice_snapshot` | Covers 30000 + 18% GST; multi-line paise rounding and invariant rollback remain uncovered |
+| FR4.3-IT-1 | Partial | `test_invoices.py::test_fr4_3_it_1_invoice_row_rejects_updates` | Database rejects invoice updates; catalog rename and repeat-render snapshot checks remain uncovered |
+| FR4.3-IT-2 | Pending |  | Return status and byte-identical sale, line and invoice records before/after return remain uncovered |
+| FR4.3-IT-3 | Partial | `test_invoices.py::test_fr4_3_it_3_history_finds_a_seven_year_old_sale_by_date_and_number` | History finds old sales; deletion and retention are #27 |
+| FR4.3-ST-1 | Automated | `test_invoices.py::test_fr4_3_st_1_twenty_parallel_cashiers_get_distinct_invoice_numbers` ; `test_constraints.py::test_invoice_numbers_unique_and_sequential` |  |
+| FR4.3-ST-2 | Partial | `test_invoices.py::test_fr4_3_st_2_invoice_pdf_has_attachment_headers_and_snapshot_text` | Covers invoice PDF headers and key totals; long multi-page invoices and credit note PDF extraction remain uncovered |
 
 ## 3.5 User Management
 

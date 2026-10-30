@@ -55,6 +55,7 @@ const SAMPLE_SALE: SaleLookup = {
   return_status: 'partially_returned',
   invoice: {
     invoice_number: 5002,
+    invoice_label: 'INV-5002',
     issued_at: '2026-10-25T10:00:00Z',
     total: '101500.00',
   },
@@ -187,7 +188,7 @@ test('lookup success shows lines, returnable quantities and the Partially Return
   expect(await screen.findByText('Wireless Mouse')).toBeInTheDocument();
   expect(screen.getByText('Pro Laptop')).toBeInTheDocument();
   expect(screen.getByText('Partially Returned')).toBeInTheDocument();
-  expect(screen.getByText('INV-005002')).toBeInTheDocument();
+  expect(screen.getByText('INV-5002')).toBeInTheDocument();
   expect(screen.getByText('Main Store')).toBeInTheDocument();
   expect(screen.getByText(/Days since sale:/i)).toBeInTheDocument();
   expect(screen.getByText('4')).toBeInTheDocument();
@@ -425,7 +426,7 @@ test('result panel shows credit note number, refund total and restock status', a
   await userEvent.click(screen.getByRole('button', { name: 'Process return' }));
 
   expect(await screen.findByText('Return processed')).toBeInTheDocument();
-  expect(screen.getByText('CN-000001')).toBeInTheDocument();
+  expect(screen.getAllByText('CN-000001')).toHaveLength(2);
   expect(screen.getByText('Not added to sellable stock (damaged)')).toBeInTheDocument();
 
   // Clicking New return resets the screen
@@ -447,4 +448,19 @@ test('Staff user opening /returns sees Access denied', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
   expect(screen.getByText(/You do not have permission to view returns/i)).toBeInTheDocument();
+});
+
+test('Staff opening /sales/history sees Access denied', async () => {
+  setupFetch(STAFF_USER);
+
+  render(
+    <MemoryRouter initialEntries={['/sales/history']}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+
+  expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
+  expect(screen.getByText(/You do not have permission to view sales history/i)).toBeInTheDocument();
 });

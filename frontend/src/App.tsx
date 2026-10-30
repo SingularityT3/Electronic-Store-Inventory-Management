@@ -15,7 +15,13 @@ import {
   ProductSearchPage,
   ProductViewPage,
 } from './modules/product';
-import { PosPage, ReturnsPage } from './modules/sales';
+import {
+  CreditNoteDocumentPage,
+  InvoiceDocumentPage,
+  PosPage,
+  ReturnsPage,
+  SalesHistoryPage,
+} from './modules/sales';
 import { LowStockReportPage, StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import {
@@ -43,6 +49,23 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+
+        <Route
+          path="/sales/invoices/:invoiceNumber"
+          element={
+            <RequirePermission permission="sales.record" what="sales">
+              <InvoiceDocumentPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="/sales/returns/:id"
+          element={
+            <RequirePermission permission="sales.record" what="returns">
+              <CreditNoteDocumentPage />
+            </RequirePermission>
+          }
+        />
 
         <Route
           path="/products"
@@ -132,6 +155,8 @@ export default function App() {
               <StockTransferPage />
             ) : item.path === '/sales' ? (
               <PosPage />
+            ) : item.path === '/sales/history' ? (
+              <SalesHistoryPage />
             ) : item.path === '/returns' ? (
               <ReturnsPage />
             ) : item.path === '/categories' ? (
