@@ -13,6 +13,7 @@ from app.modules.audit import audit_service
 from app.modules.auth import (
     Permission,
     has_permission,
+    user_full_name,
     username_by_id,
     verify_override,
 )
@@ -32,10 +33,12 @@ from app.modules.sales._internal.models import (
     SaleLine,
     SaleLineBatch,
     SaleLineSerial,
+    invoice_number_seq,
 )
 from app.modules.stock import (
     InsufficientStockError,
     consume_tracked_stock,
+    location_details,
     location_name,
     restore_batch_stock,
     restore_serial_stock,
@@ -47,6 +50,11 @@ from app.modules.stock import (
 CENT = Decimal("0.01")
 MAX_QUANTITY = 100_000
 DiscountType = Literal["percentage", "amount"]
+
+
+def invoice_label(number: int) -> str:
+    """Format the single human-facing invoice number label."""
+    return f"INV-{number:04d}"
 
 
 class SaleInputError(Exception):
@@ -362,7 +370,85 @@ def record_sale(
             for payment in payments
         ]
     )
-    db.add(Invoice(sale_id=sale.id, total=total))
+    number = db.scalar(select(invoice_number_seq.next_value()))
+    issued_at = datetime.now(UTC)
+    invoice = Invoice(sale_id=sale.id, invoice_number=number, total=total, issued_at=issued_at)
+    location = location_details(db, location_id)
+    cashier_name = user_full_name(db, cashier_id) or cashier_username
+    snapshot_lines = []
+    for sale_line, prepared_line in zip(sale_lines, prepared, strict=True):
+        serial_ids = db.scalars(
+            select(SaleLineSerial.serial_number_id).where(
+                SaleLineSerial.sale_line_id == sale_line.id
+            )
+        ).all()
+        serial_labels = serial_number_labels(db, serial_ids)
+        snapshot_lines.append(
+            {
+                "product_id": sale_line.product_id,
+                "product_name": prepared_line.product.product_name,
+                "sku": prepared_line.product.sku,
+                "variant_id": sale_line.variant_id,
+                "variant_sku": prepared_line.product.variant_sku,
+                "variant_label": ", ".join(
+                    f"{k}: {v}" for k, v in (prepared_line.product.variant_attributes or {}).items()
+                )
+                or prepared_line.product.variant_sku,
+                "quantity": sale_line.quantity,
+                "unit_price": f"{sale_line.unit_price:.2f}",
+                "discount": f"{sale_line.discount_amount:.2f}",
+                "tax": f"{sale_line.tax_amount:.2f}",
+                "line_total": f"{sale_line.line_total:.2f}",
+                "serial_numbers": [
+                    serial_labels[sid] for sid in serial_ids if sid in serial_labels
+                ],
+                "batch_numbers": [
+                    allocation.batch_number
+                    for allocation in tracking_results[
+                        (sale_line.product_id, sale_line.variant_id)
+                    ].batch_allocations
+                ],
+            }
+        )
+    line_sum = _money(sum((line.line_total for line in sale_lines), Decimal("0")))
+    if (
+        line_sum != total
+        or sale.total != invoice.total
+        or _money(subtotal - discount_total + tax_total) != total
+    ):
+        raise ValueError("Invoice totals do not match the completed sale.")
+    invoice.content = {
+        "version": 1,
+        "kind": "invoice",
+        "invoice_number": invoice.invoice_number,
+        "invoice_label": invoice_label(invoice.invoice_number),
+        "issued_at": invoice.issued_at.isoformat(),
+        "store_name": settings.store_name,
+        "store_gstin": settings.store_gstin,
+        "location_id": location_id,
+        "location_name": location[0] if location else f"Location {location_id}",
+        "location_address": location[1] if location else None,
+        "cashier_id": cashier_id,
+        "cashier_name": cashier_name,
+        "cashier_username": cashier_username,
+        "customer_name": sale.customer_name,
+        "gst_rate": f"{settings.gst_rate:.2f}",
+        "lines": snapshot_lines,
+        "subtotal": f"{subtotal:.2f}",
+        "discount_total": f"{discount_total:.2f}",
+        "tax_total": f"{tax_total:.2f}",
+        "total": f"{total:.2f}",
+        "payments": [
+            {
+                "method": payment.method,
+                "amount": f"{_money(payment.amount):.2f}",
+                "reference": payment.reference.strip() if payment.reference else None,
+            }
+            for payment in payments
+        ],
+        "notes": None,
+    }
+    db.add(invoice)
     audit_service.record(
         db,
         module="sales",
@@ -575,6 +661,7 @@ class ReturnCreditNote:
     refund_total: Decimal
     non_sellable_quantity: int
     lines: list[ReturnCreditNoteLine]
+    content: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1123,7 +1210,49 @@ def process_return(
         )
 
     db.flush()
-    return get_credit_note(db, return_obj.id)
+    credit_note = get_credit_note(db, return_obj.id)
+    credit_note_content = {
+        "version": 1,
+        "kind": "credit_note",
+        "credit_note_number": credit_note.credit_note_number,
+        "return_id": credit_note.return_id,
+        "sale_id": credit_note.sale_id,
+        "invoice_number": credit_note.invoice_number,
+        "invoice_label": invoice_label(credit_note.invoice_number),
+        "created_at": credit_note.created_at.isoformat(),
+        "sold_at": credit_note.sold_at.isoformat(),
+        "store_name": settings.store_name,
+        "store_gstin": settings.store_gstin,
+        "location_id": credit_note.location_id,
+        "location_name": credit_note.location_name,
+        "location_address": (location_details(db, credit_note.location_id) or (None, None))[1],
+        "processor_name": user_full_name(db, processor_id) or processor_username,
+        "processor_username": credit_note.processor_username,
+        "approver_username": credit_note.approver_username,
+        "customer_name": sale.customer_name,
+        "reason": credit_note.reason,
+        "refund_total": f"{credit_note.refund_total:.2f}",
+        "lines": [
+            {
+                "id": line.id,
+                "sale_line_id": line.sale_line_id,
+                "product_id": line.product_id,
+                "product_name": line.product_name,
+                "sku": line.sku,
+                "variant_id": line.variant_id,
+                "variant_sku": line.variant_sku,
+                "quantity": line.quantity,
+                "condition": line.condition,
+                "restocked": line.restocked,
+                "refund_amount": f"{line.refund_amount:.2f}",
+                "serial_numbers": line.serial_numbers,
+            }
+            for line in credit_note.lines
+        ],
+    }
+    return_obj.content = credit_note_content
+    credit_note = ReturnCreditNote(**{**credit_note.__dict__, "content": credit_note_content})
+    return credit_note
 
 
 def get_credit_note(db: Session, return_id: int) -> ReturnCreditNote:
@@ -1140,6 +1269,43 @@ def get_credit_note(db: Session, return_id: int) -> ReturnCreditNote:
     invoice = db.scalar(select(Invoice).where(Invoice.sale_id == sale.id))
     if invoice is None:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Invoice not found for sale.")
+
+    if ret.content and ret.content.get("lines"):
+        saved = ret.content
+        saved_lines = [
+            ReturnCreditNoteLine(
+                id=line["id"],
+                sale_line_id=line["sale_line_id"],
+                product_id=line["product_id"],
+                product_name=line["product_name"],
+                sku=line["sku"],
+                variant_id=line.get("variant_id"),
+                variant_sku=line.get("variant_sku"),
+                quantity=line["quantity"],
+                condition=line["condition"],
+                restocked=line["restocked"],
+                refund_amount=Decimal(line["refund_amount"]),
+                serial_numbers=line.get("serial_numbers", []),
+            )
+            for line in saved["lines"]
+        ]
+        return ReturnCreditNote(
+            credit_note_number=saved["credit_note_number"],
+            return_id=ret.id,
+            sale_id=sale.id,
+            invoice_number=invoice.invoice_number,
+            created_at=ret.created_at,
+            sold_at=sale.sold_at,
+            location_id=saved["location_id"],
+            location_name=saved["location_name"],
+            reason=saved.get("reason", ""),
+            processor_username=saved.get("processor_username", ""),
+            approver_username=saved.get("approver_username"),
+            refund_total=Decimal(saved["refund_total"]),
+            non_sellable_quantity=sum(line.quantity for line in saved_lines if not line.restocked),
+            lines=saved_lines,
+            content=saved,
+        )
 
     processor_user = username_by_id(db, ret.processed_by) or f"User {ret.processed_by}"
     approver_user = username_by_id(db, ret.approved_by) if ret.approved_by else None
@@ -1213,6 +1379,7 @@ def get_credit_note(db: Session, return_id: int) -> ReturnCreditNote:
         refund_total=ret.refund_total,
         non_sellable_quantity=non_sellable_qty,
         lines=credit_lines,
+        content=ret.content,
     )
 
 

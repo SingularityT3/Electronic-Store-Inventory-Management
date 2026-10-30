@@ -209,8 +209,38 @@ Customer returns (`POST /api/sales/returns`) run in one atomic database transact
 6. Credit note data: credit note number format `CN-<return_id>` zero-padded. Audit entries `return_processed` and
    (for late returns) `return_late_approved` are recorded atomically.
 
-Invoice and credit note PDF/printable layout remains #26, retention and delete protection remains #27, and sales trend
-report netting remains #31 (net sales subtract `return_lines.refund_amount`).
+Invoice and credit note PDF/printable layout is described in #26 below; retention and delete
+protection remains #27, and sales trend report netting remains #31 (net sales subtract
+`return_lines.refund_amount`).
+
+## Invoices and receipts (#26)
+
+`record_sale` allocates the invoice number from PostgreSQL's `invoice_number_seq` and writes the
+invoice with the sale in one transaction. `invoice_label(n)` is the only display formatter:
+`INV-0007`, `INV-12345`; the lookup parser continues to accept either the bare number or the
+`INV-` prefix. PostgreSQL sequences are concurrent-safe and are not gapless: a rolled-back sale
+can consume a number, and that gap is retained.
+
+Each invoice stores a versioned JSONB `content` snapshot when created. It includes store settings,
+location and cashier labels, customer, GST rate, line and tracking labels, payments and all money
+totals. Before insertion, the service checks line-total sum, invoice/sale total equality and
+`subtotal - discount + tax = total`; a mismatch aborts the entire sale. A database trigger rejects
+every invoice update. Return rows likewise receive a versioned `content` snapshot inside the return
+transaction; `get_credit_note` reads this snapshot so later catalog edits cannot rewrite a receipt.
+The return trigger permits the initial `{}` to snapshot write and rejects later content changes.
+
+Both snapshots feed one `Document` model and one A4 portrait fpdf2 renderer in `sales`. Core
+Helvetica fonts use Latin-1; the rupee symbol is rendered as `Rs `, matching reporting exports.
+The PDF records the snapshot issue/return date as its creation date; text and document data are
+stable on re-render (PDF bytes are not promised byte-identical). Table headers repeat on page breaks,
+long item names wrap, amounts align to the right and each page is numbered.
+
+`GET /api/sales/history` provides scoped, filterable paging without a date cutoff.
+`GET /api/sales/invoices/{invoice_number}` returns the stored content plus live return status and
+credit-note summaries. PDF exports are at `/api/sales/invoices/{invoice_number}/pdf` and
+`/api/sales/returns/{return_id}/pdf`; successful exports are audited. Return status is an annotation
+(`Partially Returned` or `Fully Returned`) and never changes the original invoice snapshot.
+Retention and deletion policy remain #27; this feature adds no invoice delete path.
 
 ## Product catalog
 

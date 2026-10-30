@@ -53,6 +53,8 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | Serial sale/return traceability (FR-2.5)              | `sale_line_serials` and `return_line_serials` retain original sale and return links while `serial_numbers.status` and `location_id` describe current availability. |
 | No over-receipt (A-7, FR-3.3)                       | `CHECK (quantity_received <= quantity_ordered)` on `purchase_order_lines`                 |
 | Unique, sequential invoice number (FR-4.3)          | `invoices.invoice_number` defaults to `nextval('invoice_number_seq')` and is `UNIQUE`. One invoice per sale (`UNIQUE sale_id`). |
+| Immutable invoice snapshot (FR-4.3)                  | `invoices.content` is `JSONB NOT NULL`; `invoices_no_update` rejects every update. |
+| Immutable credit note snapshot (FR-4.3)              | `returns.content` is `JSONB NOT NULL`; a trigger rejects changes after the initial snapshot write. |
 | Damaged returns are not restocked (FR-4.2)          | `CHECK` on `return_lines`                                                                 |
 | Staff and Cashier have a location (A-9)             | `CHECK` on `users`                                                                        |
 | Case-insensitive unique username                    | Unique index on `lower(username)`                                                         |
@@ -62,8 +64,8 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 
 Notes:
 
-- A rolled-back transaction leaves a gap in the invoice sequence. If gapless numbering is
-  required, #26 can switch to a counter row locked in the sale transaction.
+- A rolled-back transaction leaves a gap in `invoice_number_seq`. The sequence is intentionally
+  retained for concurrency-safe numbering; gaps are not reused or repaired.
 - `sales.discount_total` and `sale_lines.discount_amount` store the rounded discount snapshots.
   `sales.idempotency_key` is nullable and unique, so a retry cannot charge twice.
 - Sales compute GST on each discounted line using `GST_RATE`, round half up to two decimals, and
@@ -256,6 +258,8 @@ erDiagram
         int sale_id UK
         bigint invoice_number UK
         numeric total
+        timestamptz issued_at
+        jsonb content "immutable snapshot"
     }
     returns {
         int id PK
@@ -264,6 +268,7 @@ erDiagram
         int approved_by FK "NULL if within return window"
         text reason
         numeric refund_total
+        jsonb content "immutable snapshot"
         timestamptz created_at
     }
     return_lines {

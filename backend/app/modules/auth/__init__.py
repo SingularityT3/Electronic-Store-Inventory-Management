@@ -20,6 +20,8 @@ from app.modules.auth.service import (
     ManagerApprovalError,
     Permission,
     po_status_notification_recipients,
+    user_full_name,
+    user_full_names,
     username_by_id,
     verify_override,
 )
@@ -39,5 +41,7 @@ __all__ = [
     "require",
     "signed_in",
     "username_by_id",
+    "user_full_name",
+    "user_full_names",
     "verify_override",
 ]

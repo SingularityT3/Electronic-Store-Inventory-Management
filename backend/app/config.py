@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     product_image_max_bytes: int = 5 * 1024 * 1024
     gst_rate: Decimal = Decimal("18")
     return_window_days: int = 30
+    store_name: str = "ESIMS Electronics"
+    store_gstin: str | None = None
 
 
 @lru_cache
