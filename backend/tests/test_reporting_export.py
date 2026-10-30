@@ -111,12 +111,13 @@ def test_fr6_5_it_2_pdf_header_has_title_time_and_filter(client, make_user, db):
     response = client.get(f"/api/reporting/valuation/export?format=pdf&location_id={location.id}")
 
     assert response.status_code == 200
-    # Page content is Flate-compressed, so decode it before looking for the text.
-    import re as _re
-    import zlib
+    from io import BytesIO
 
-    streams = _re.findall(rb"stream\r?\n(.*?)\r?\nendstream", response.content, _re.S)
-    text = b"".join(zlib.decompress(s) for s in streams if s[:1] == b"x").decode("latin-1")
+    from pypdf import PdfReader
+
+    text = " ".join(
+        page.extract_text() or "" for page in PdfReader(BytesIO(response.content)).pages
+    )
     assert "Stock Valuation Report" in text
     assert "Generated: " in text
     assert "Location: Header Store" in text

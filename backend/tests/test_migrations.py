@@ -58,6 +58,27 @@ def test_models_match_migrations(migrated_engine):
         assert compare_metadata(context, metadata) == []
 
 
+def test_retention_triggers_exist_after_upgrade(migrated_engine):
+    with migrated_engine.connect() as conn:
+        triggers = set(conn.scalars(text("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")))
+        for table in (
+            "sales",
+            "sale_lines",
+            "sale_line_serials",
+            "sale_line_batches",
+            "payments",
+            "returns",
+            "return_lines",
+            "return_line_serials",
+            "return_line_batches",
+            "invoices",
+        ):
+            assert f"{table}_retention_delete" in triggers
+            assert f"{table}_retention_truncate" in triggers
+        assert "sales_retention_clock_immutable" in triggers
+        assert "returns_retention_clock_immutable" in triggers
+
+
 def test_roles_are_seeded_by_migration(conn):
     roles = set(conn.scalars(text("SELECT code FROM roles")))
     assert roles == {"admin", "manager", "staff", "cashier"}

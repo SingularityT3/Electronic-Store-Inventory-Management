@@ -71,7 +71,7 @@ Notes:
 - Sales compute GST on each discounted line using `GST_RATE`, round half up to two decimals, and
   sum the stored line totals. Card numbers are never accepted or stored.
 - Category cycles deeper than self-parenting are left to the application (#10).
-- Retention and delete protection for sales, returns and invoices are #27.
+- Migration 0013 blocks DELETE inside eight calendar years for sales, returns, invoices, and child/link rows; it always blocks TRUNCATE and blocks changes to transaction date fields.
 - Products and variants are soft-deleted (`is_active`), because sales and stock refer to them.
 - An item is a product (`variant_id` NULL) or one of its variants. A product with variants is
   stocked per variant.

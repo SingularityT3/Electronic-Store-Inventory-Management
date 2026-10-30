@@ -159,7 +159,7 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 | FR4.3-UT-3 | Partial | `test_invoices.py::test_fr4_3_ut_2_sale_persists_required_invoice_snapshot` | Covers 30000 + 18% GST; multi-line paise rounding and invariant rollback remain uncovered |
 | FR4.3-IT-1 | Partial | `test_invoices.py::test_fr4_3_it_1_invoice_row_rejects_updates` | Database rejects invoice updates; catalog rename and repeat-render snapshot checks remain uncovered |
 | FR4.3-IT-2 | Pending |  | Return status and byte-identical sale, line and invoice records before/after return remain uncovered |
-| FR4.3-IT-3 | Partial | `test_invoices.py::test_fr4_3_it_3_history_finds_a_seven_year_old_sale_by_date_and_number` | History finds old sales; deletion and retention are #27 |
+| FR4.3-IT-3 | Partial | `test_invoices.py::test_fr4_3_it_3_history_finds_a_seven_year_old_sale_by_date_and_number` ; `test_invoices.py::test_retention_rejects_deleting_a_recent_invoice` ; `test_retention.py::test_retention_archive_dry_run_then_execute_is_verified_and_repeatable` | Seven-year history, retention delete, and archive are covered; 7 years 364 days and old PDF retrieval remain untested |
 | FR4.3-ST-1 | Automated | `test_invoices.py::test_fr4_3_st_1_twenty_parallel_cashiers_get_distinct_invoice_numbers` ; `test_constraints.py::test_invoice_numbers_unique_and_sequential` |  |
 | FR4.3-ST-2 | Partial | `test_invoices.py::test_fr4_3_st_2_invoice_pdf_has_attachment_headers_and_snapshot_text` | Covers invoice PDF headers and key totals; long multi-page invoices and credit note PDF extraction remain uncovered |
 

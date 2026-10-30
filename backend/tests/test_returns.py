@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.audit._internal.models import AuditLog
@@ -157,8 +157,10 @@ def setup_sale_fixture(
 
     if backdate_days > 0:
         backdated = datetime.now(UTC) - timedelta(days=backdate_days)
+        db.execute(text("ALTER TABLE sales DISABLE TRIGGER sales_retention_clock_immutable"))
         sale.sold_at = backdated
         db.commit()
+        db.execute(text("ALTER TABLE sales ENABLE TRIGGER sales_retention_clock_immutable"))
 
     return location, product, sale, invoice, sale_line, serials_sold
 

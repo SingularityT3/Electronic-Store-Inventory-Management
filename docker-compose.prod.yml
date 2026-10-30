@@ -45,6 +45,8 @@ services:
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
       SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
       PRODUCT_IMAGE_DIR: /data/product-images
+      RETENTION_YEARS: ${RETENTION_YEARS:-8}
+      RETENTION_ARCHIVE_PATH: /retention-archive
       PRODUCT_IMAGE_MAX_BYTES: ${PRODUCT_IMAGE_MAX_BYTES:-5242880}
       APP_BASE_URL: https://${SITE_ADDRESS:-localhost}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -63,6 +65,7 @@ services:
       retries: 5
     volumes:
       - product-images:/data/product-images
+      - retention-archive:/retention-archive
 
   monitor:
     image: esims-backend:prod
@@ -99,7 +102,8 @@ services:
       BACKUP_TIME: ${BACKUP_TIME:-02:00}
       BACKUP_TIMEZONE: ${MONITOR_TIMEZONE:-UTC}
       BACKUP_KEEP_DAILY_DAYS: ${BACKUP_KEEP_DAILY_DAYS:-30}
-      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-96}
+      BACKUP_KEEP_MONTHLY: ${BACKUP_KEEP_MONTHLY:-}
+      RETENTION_YEARS: ${RETENTION_YEARS:-8}
       MONITOR_ALERT_TO: ${MONITOR_ALERT_TO:-}
       MONITOR_WEBHOOK_URL: ${MONITOR_WEBHOOK_URL:-}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -146,4 +150,5 @@ volumes:
   caddy-data:
   product-images:
   uptime-data:
+  retention-archive:
   backups:

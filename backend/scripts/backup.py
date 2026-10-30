@@ -48,12 +48,16 @@ class Config:
     # first backup of each month, kept for `keep_monthly` months (96 = the 8 years of SRS A-2).
     keep_daily_days: int = 30
     keep_monthly: int = 96
+    retention_years: int = 8
     # `check` fails if the newest backup is older than this.
     max_age_hours: int = 26
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Config":
         e = os.environ if env is None else env
+        retention_years = int(e.get("RETENTION_YEARS", "8"))
+        monthly_setting = e.get("BACKUP_KEEP_MONTHLY")
+        keep_monthly = int(monthly_setting) if monthly_setting else retention_years * 12
         return cls(
             database_url=e.get("DATABASE_URL", ""),
             backup_dir=Path(e.get("BACKUP_DIR", str(cls.backup_dir))),
@@ -61,7 +65,8 @@ class Config:
             run_at=dtime.fromisoformat(e.get("BACKUP_TIME", "02:00")),
             timezone=e.get("BACKUP_TIMEZONE", "UTC"),
             keep_daily_days=int(e.get("BACKUP_KEEP_DAILY_DAYS", cls.keep_daily_days)),
-            keep_monthly=int(e.get("BACKUP_KEEP_MONTHLY", cls.keep_monthly)),
+            keep_monthly=keep_monthly,
+            retention_years=retention_years,
             max_age_hours=int(e.get("BACKUP_MAX_AGE_HOURS", cls.max_age_hours)),
         )
 
@@ -208,6 +213,11 @@ def restore(config: Config, backup: Path) -> None:
 def backup_job(config: Config, alert: bool = True) -> bool:
     """One scheduled run: backup, prune, alert on failure. Returns success."""
     now = datetime.now(UTC)
+    if config.keep_monthly < config.retention_years * 12:
+        logger.warning(
+            "BACKUP_KEEP_MONTHLY is below RETENTION_YEARS x 12; "
+            "backup coverage is shorter than record retention"
+        )
     try:
         clear_stale_tmp(config)
         path = make_backup(config, now)
@@ -234,6 +244,12 @@ def newest_age(config: Config, now: datetime) -> timedelta | None:
 def check_job(config: Config, alert: bool = True) -> bool:
     """True if the newest backup is recent enough; otherwise alert."""
     now = datetime.now(UTC)
+    if config.keep_monthly < config.retention_years * 12:
+        logger.error(
+            "BACKUP_KEEP_MONTHLY must be at least RETENTION_YEARS x 12 (%s months)",
+            config.retention_years * 12,
+        )
+        return False
     age = newest_age(config, now)
     if age is not None and age <= timedelta(hours=config.max_age_hours):
         return True

@@ -62,6 +62,23 @@ def test_duplicate_product_sku_rejected(conn, ids):
     assert_rejected(conn, PRODUCT_SQL, "uq_products_sku", sku="T-PROD", c=ids["category"])
 
 
+def test_retention_blocks_truncate_for_all_sales_tables(conn):
+    tables = (
+        "sales",
+        "sale_lines",
+        "sale_line_serials",
+        "sale_line_batches",
+        "payments",
+        "returns",
+        "return_lines",
+        "return_line_serials",
+        "return_line_batches",
+        "invoices",
+    )
+    for table in tables:
+        assert_rejected(conn, f"TRUNCATE TABLE {table} CASCADE")
+
+
 def test_duplicate_variant_sku_rejected(conn, ids):
     assert_rejected(
         conn,
