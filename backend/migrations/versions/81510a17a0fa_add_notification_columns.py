@@ -10,8 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = '81510a17a0fa'
-down_revision: str | None = '0013'
+revision: str = "81510a17a0fa"
+down_revision: str | None = "0013"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -19,12 +19,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     # Add dismissed_at and resolved_at columns to notifications table
     op.add_column(
-        "notifications",
-        sa.Column("dismissed_at", sa.DateTime(timezone=True), nullable=True)
+        "notifications", sa.Column("dismissed_at", sa.DateTime(timezone=True), nullable=True)
     )
     op.add_column(
-        "notifications",
-        sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True)
+        "notifications", sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True)
     )
 
     # Partial unique index: one active notification per recipient per alert per type
@@ -34,8 +32,7 @@ def upgrade() -> None:
         ["recipient_user_id", "type", "reference_type", "reference_id"],
         unique=True,
         postgresql_where=sa.text(
-            "resolved_at IS NULL AND dismissed_at IS NULL "
-            "AND reference_type = 'stock_alert'"
+            "resolved_at IS NULL AND dismissed_at IS NULL " "AND reference_type = 'stock_alert'"
         ),
     )
 

@@ -54,8 +54,7 @@ class Notification(Base):
             "reference_id",
             unique=True,
             postgresql_where=(
-                "resolved_at IS NULL AND dismissed_at IS NULL "
-                "AND reference_type = 'stock_alert'"
+                "resolved_at IS NULL AND dismissed_at IS NULL " "AND reference_type = 'stock_alert'"
             ),
         ),
         Index(

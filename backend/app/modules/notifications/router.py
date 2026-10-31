@@ -81,13 +81,13 @@ def list_notifications(
         location_name = nd.location_name
         if nd.location_id and location_name is None:
             location_name = db.scalar(
-                select(Notification.location_id)
-                .where(Notification.id == nd.id)
+                select(Notification.location_id).where(Notification.id == nd.id)
             )
             # Note: We'd need a join or separate query, but for simplicity
             # we'll add the location name if we can get it from stock_alerts
             if nd.reference_type == "stock_alert" and nd.reference_id:
                 from app.modules.notifications._internal.models import StockAlert
+
                 alert = db.get(StockAlert, nd.reference_id)
                 if alert:
                     location_name = alert.location_name
@@ -95,6 +95,7 @@ def list_notifications(
         links = None
         if nd.reference_type == "stock_alert" and nd.reference_id:
             from app.modules.notifications._internal.models import StockAlert
+
             alert = db.get(StockAlert, nd.reference_id)
             if alert:
                 links = {

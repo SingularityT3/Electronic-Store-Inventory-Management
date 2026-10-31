@@ -248,8 +248,7 @@ def reevaluate_stock_alert(
             # Same alert type, but quantity may have changed
             # Update message of existing non-dismissed, non-resolved notifications
             notifications = db.scalars(
-                select(Notification)
-                .where(
+                select(Notification).where(
                     Notification.reference_type == "stock_alert",
                     Notification.reference_id == alert.id,
                     Notification.dismissed_at.is_(None),
@@ -387,17 +386,20 @@ def list_user_notifications(
 
 def unread_count(db: Session, *, user_id: int) -> int:
     """Count unread active notifications for a user."""
-    return db.scalar(
-        select(select(Notification.id))
-        .where(
-            Notification.recipient_user_id == user_id,
-            Notification.dismissed_at.is_(None),
-            Notification.resolved_at.is_(None),
-            Notification.is_read.is_(False),
+    return (
+        db.scalar(
+            select(select(Notification.id))
+            .where(
+                Notification.recipient_user_id == user_id,
+                Notification.dismissed_at.is_(None),
+                Notification.resolved_at.is_(None),
+                Notification.is_read.is_(False),
+            )
+            .exists()
+            .select()
         )
-        .exists()
-        .select()
-    ) or 0
+        or 0
+    )
 
 
 def mark_read(db: Session, *, user_id: int, notification_id: int) -> None:
