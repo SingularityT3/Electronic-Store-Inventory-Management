@@ -33,7 +33,10 @@ def upgrade() -> None:
         "notifications",
         ["recipient_user_id", "type", "reference_type", "reference_id"],
         unique=True,
-        postgresql_where=sa.text("resolved_at IS NULL AND dismissed_at IS NULL AND reference_type = 'stock_alert'"),
+        postgresql_where=sa.text(
+            "resolved_at IS NULL AND dismissed_at IS NULL "
+            "AND reference_type = 'stock_alert'"
+        ),
     )
 
     # Index for unread count and active list (recipient, dismissed/resolved state, created_at)

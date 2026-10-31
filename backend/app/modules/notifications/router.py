@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from app.db import get_session
 from app.modules.auth import CurrentUser, Permission, authorize_location, require
 from app.modules.notifications import (
-    NotificationData,
     StockAlertData,
     active_stock_alerts,
     dismiss,
@@ -147,8 +146,8 @@ def read_notification(
 ) -> dict[str, str]:
     try:
         mark_read(db, user_id=user.id, notification_id=notification_id)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification not found")
+    except ValueError as err:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification not found") from err
     return {"status": "read"}
 
 
@@ -175,8 +174,8 @@ def dismiss_notification(
 ) -> dict[str, str]:
     try:
         dismiss(db, user_id=user.id, notification_id=notification_id)
-    except ValueError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification not found")
+    except ValueError as err:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification not found") from err
     return {"status": "dismissed"}
 
 

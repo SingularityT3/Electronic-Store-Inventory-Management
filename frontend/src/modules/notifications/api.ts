@@ -28,23 +28,32 @@ export interface NotificationFilters {
   offset?: number;
   unread_only?: boolean;
   include_read?: boolean;
+  [key: string]: string | number | boolean | undefined;
+}
+
+function buildUrl(
+  path: string,
+  params: Record<string, string | number | boolean | undefined>,
+): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 export const notificationsApi = {
   list: (filters: NotificationFilters = {}) =>
-    api<Notification[]>('/notifications', {
-      query: filters,
-    }),
+    api<Notification[]>(buildUrl('/notifications', filters)),
 
-  unreadCount: () =>
-    api<UnreadCount>('/notifications/unread-count'),
+  unreadCount: () => api<UnreadCount>('/notifications/unread-count'),
 
-  markRead: (id: number) =>
-    api(`/notifications/${id}/read`, { method: 'POST' }),
+  markRead: (id: number) => api(`/notifications/${id}/read`, { method: 'POST' }),
 
-  markAllRead: () =>
-    api('/notifications/read-all', { method: 'POST' }),
+  markAllRead: () => api('/notifications/read-all', { method: 'POST' }),
 
-  dismiss: (id: number) =>
-    api(`/notifications/${id}/dismiss`, { method: 'POST' }),
+  dismiss: (id: number) => api(`/notifications/${id}/dismiss`, { method: 'POST' }),
 };

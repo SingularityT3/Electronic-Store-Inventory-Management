@@ -2,7 +2,6 @@
 
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy import false, or_, select
 from sqlalchemy.orm import Session
@@ -436,7 +435,10 @@ def mark_all_read(db: Session, *, user_id: int) -> None:
 
 
 def dismiss(db: Session, *, user_id: int, notification_id: int) -> None:
-    """Dismiss a notification (also marks as read). Idempotent. 404 if not found or not owned by user."""
+    """Dismiss a notification (also marks as read). Idempotent.
+
+    404 if not found or not owned by user.
+    """
     notification = db.scalar(
         select(Notification).where(
             Notification.id == notification_id,

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Open/closed state for a header popover that closes on Escape or a click outside it. */
 export function usePopover<T extends HTMLElement>() {
   const [open, setOpen] = useState(false);
   const ref = useRef<T>(null);
+  const close = useCallback(() => setOpen(false), [setOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -21,5 +22,5 @@ export function usePopover<T extends HTMLElement>() {
     };
   }, [open]);
 
-  return { open, setOpen, ref };
+  return { open, setOpen, close, ref };
 }

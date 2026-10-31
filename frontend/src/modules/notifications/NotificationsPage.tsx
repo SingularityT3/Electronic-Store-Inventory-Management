@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api';
-import { DataTable, EmptyState, FormField } from '../../shell/components';
+import { DataTable, EmptyState } from '../../shell/components';
 import { useAuth, can } from '../auth';
 
 interface Notification {
@@ -36,7 +36,6 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function NotificationsPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -45,18 +44,32 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchNotifications = async () => {
+  function buildUrl(
+    path: string,
+    params: Record<string, string | number | boolean | undefined>,
+  ): string {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, String(value));
+      }
+    });
+    const query = searchParams.toString();
+    return query ? `${path}?${query}` : path;
+  }
+
+  const fetchNotifications = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const response = await api<NotificationsResponse>('/notifications', {
-        query: {
+      const response = await api<NotificationsResponse>(
+        buildUrl('/notifications', {
           limit: pageSize,
           offset: (page - 1) * pageSize,
           unread_only: filter === 'unread',
           include_read: filter === 'all',
-        },
-      });
+        }),
+      );
       setNotifications(response.items);
       setTotal(response.total);
     } catch (err) {
@@ -64,64 +77,66 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, pageSize, filter]);
 
   useEffect(() => {
     fetchNotifications();
-  }, [page, filter]);
+  }, [fetchNotifications]);
 
   const handleMarkRead = async (id: number) => {
-    const notif = notifications.find(n => n.id === id);
+    const notif = notifications.find((n) => n.id === id);
     if (!notif) return;
 
-    setNotifications(prev =>
-      prev.map(n =>
-        n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n
-      )
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n,
+      ),
     );
 
     try {
       await api(`/notifications/${id}/read`, { method: 'POST' });
     } catch (err) {
-      setNotifications(prev => prev.map(n => (n.id === id ? notif : n)));
+      setNotifications((prev) => prev.map((n) => (n.id === id ? notif : n)));
       setError(err instanceof Error ? err.message : 'Failed to mark as read');
     }
   };
 
   const handleMarkAllRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
+    const unread = notifications.filter((n) => !n.is_read);
     if (unread.length === 0) return;
 
     const now = new Date().toISOString();
-    setNotifications(prev =>
-      prev.map(n => (n.is_read ? n : { ...n, is_read: true, read_at: now }))
+    setNotifications((prev) =>
+      prev.map((n) => (n.is_read ? n : { ...n, is_read: true, read_at: now })),
     );
 
     try {
       await api('/notifications/read-all', { method: 'POST' });
     } catch (err) {
-      setNotifications(prev =>
-        prev.map(n => {
-          const original = unread.find(o => o.id === n.id);
+      setNotifications((prev) =>
+        prev.map((n) => {
+          const original = unread.find((o) => o.id === n.id);
           return original ? original : n;
-        })
+        }),
       );
       setError(err instanceof Error ? err.message : 'Failed to mark all as read');
     }
   };
 
   const handleDismiss = async (id: number) => {
-    const notif = notifications.find(n => n.id === id);
+    const notif = notifications.find((n) => n.id === id);
     if (!notif) return;
 
-    setNotifications(prev => prev.filter(n => n.id !== id));
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
 
     try {
       await api(`/notifications/${id}/dismiss`, { method: 'POST' });
     } catch (err) {
-      setNotifications(prev => [...prev, notif].sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ));
+      setNotifications((prev) =>
+        [...prev, notif].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        ),
+      );
       setError(err instanceof Error ? err.message : 'Failed to dismiss');
     }
   };
@@ -149,10 +164,15 @@ export default function NotificationsPage() {
           return `/stock?product=${notification.links.product_id}&location=${locationId}`;
         }
         return `/products/search?q=${encodeURIComponent(
-          notification.title.replace('Low stock: ', '').replace('Out of stock: ', '').split(' (')[0]
+          notification.title
+            .replace('Low stock: ', '')
+            .replace('Out of stock: ', '')
+            .split(' (')[0],
         )}`;
       }
-      const variantPart = notification.links.variant_id ? `/variants/${notification.links.variant_id}` : '';
+      const variantPart = notification.links.variant_id
+        ? `/variants/${notification.links.variant_id}`
+        : '';
       return `/products/${notification.links.product_id}${variantPart}`;
     }
 
@@ -190,18 +210,18 @@ export default function NotificationsPage() {
     <div className="page">
       <header className="page-header">
         <h1>Notifications</h1>
-        {notifications.some(n => !n.is_read) && (
-          <button
-            type="button"
-            className="page-action"
-            onClick={handleMarkAllRead}
-          >
+        {notifications.some((n) => !n.is_read) && (
+          <button type="button" className="page-action" onClick={handleMarkAllRead}>
             Mark all as read
           </button>
         )}
       </header>
 
-      {error && <div className="error" role="alert">{error}</div>}
+      {error && (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      )}
 
       <form className="audit-filters" aria-label="Filter notifications">
         <label>
@@ -222,10 +242,7 @@ export default function NotificationsPage() {
       {loading ? (
         <p className="loading">Loading notifications…</p>
       ) : notifications.length === 0 ? (
-        <EmptyState
-          title="No notifications"
-          message={filter === 'unread' ? 'All caught up!' : 'No notifications yet.'}
-        />
+        <EmptyState message={filter === 'unread' ? 'All caught up!' : 'No notifications yet.'} />
       ) : (
         <>
           <DataTable

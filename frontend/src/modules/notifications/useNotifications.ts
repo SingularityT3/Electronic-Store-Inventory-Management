@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { notificationsApi, Notification, UnreadCount } from './api';
+import { notificationsApi, Notification } from './api';
 import { useAuth } from '../auth';
 
 export function useNotifications() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -64,8 +64,6 @@ export function useNotifications() {
 
   // Fetch on mount, user change, and when window regains focus
   useEffect(() => {
-    if (authLoading) return;
-
     // Reset state when user changes
     if (user?.id !== lastUserIdRef.current) {
       setNotifications([]);
@@ -79,7 +77,7 @@ export function useNotifications() {
     } else {
       setLoading(false);
     }
-  }, [user, authLoading, fetchNotifications]);
+  }, [user, fetchNotifications]);
 
   // Refresh on window focus
   useEffect(() => {
@@ -93,40 +91,36 @@ export function useNotifications() {
   }, [user, fetchNotifications]);
 
   const markRead = async (id: number) => {
-    const notif = notifications.find(n => n.id === id);
+    const notif = notifications.find((n) => n.id === id);
     if (!notif) return;
 
     // Optimistic update
-    setNotifications(prev =>
-      prev.map(n =>
-        n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n
-      )
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n,
+      ),
     );
-    setUnreadCount(prev => Math.max(0, prev - (notif.is_read ? 0 : 1)));
+    setUnreadCount((prev) => Math.max(0, prev - (notif.is_read ? 0 : 1)));
 
     try {
       await notificationsApi.markRead(id);
     } catch (err) {
       // Rollback
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? notif : n))
-      );
-      setUnreadCount(prev => prev + (notif.is_read ? 0 : 1));
+      setNotifications((prev) => prev.map((n) => (n.id === id ? notif : n)));
+      setUnreadCount((prev) => prev + (notif.is_read ? 0 : 1));
       setError(err instanceof Error ? err.message : 'Failed to mark as read');
       throw err;
     }
   };
 
   const markAllRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
+    const unread = notifications.filter((n) => !n.is_read);
     if (unread.length === 0) return;
 
     // Optimistic update
     const now = new Date().toISOString();
-    setNotifications(prev =>
-      prev.map(n =>
-        n.is_read ? n : { ...n, is_read: true, read_at: now }
-      )
+    setNotifications((prev) =>
+      prev.map((n) => (n.is_read ? n : { ...n, is_read: true, read_at: now })),
     );
     setUnreadCount(0);
 
@@ -134,11 +128,11 @@ export function useNotifications() {
       await notificationsApi.markAllRead();
     } catch (err) {
       // Rollback
-      setNotifications(prev =>
-        prev.map(n => {
-          const original = unread.find(o => o.id === n.id);
+      setNotifications((prev) =>
+        prev.map((n) => {
+          const original = unread.find((o) => o.id === n.id);
           return original ? original : n;
-        })
+        }),
       );
       setUnreadCount(unread.length);
       setError(err instanceof Error ? err.message : 'Failed to mark all as read');
@@ -147,21 +141,23 @@ export function useNotifications() {
   };
 
   const dismiss = async (id: number) => {
-    const notif = notifications.find(n => n.id === id);
+    const notif = notifications.find((n) => n.id === id);
     if (!notif) return;
 
     // Optimistic update
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    setUnreadCount(prev => Math.max(0, prev - (notif.is_read ? 0 : 1)));
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setUnreadCount((prev) => Math.max(0, prev - (notif.is_read ? 0 : 1)));
 
     try {
       await notificationsApi.dismiss(id);
     } catch (err) {
       // Rollback
-      setNotifications(prev => [...prev, notif].sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      ));
-      setUnreadCount(prev => prev + (notif.is_read ? 0 : 1));
+      setNotifications((prev) =>
+        [...prev, notif].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        ),
+      );
+      setUnreadCount((prev) => prev + (notif.is_read ? 0 : 1));
       setError(err instanceof Error ? err.message : 'Failed to dismiss');
       throw err;
     }

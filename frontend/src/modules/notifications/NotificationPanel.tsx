@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePopover } from '../../shell/usePopover';
 import { useAuth } from '../auth';
 import { useNotifications } from './useNotifications';
@@ -11,18 +11,9 @@ interface NotificationPanelProps {
 
 export function NotificationPanel({ bellRef }: NotificationPanelProps) {
   const { user } = useAuth();
-  const { open, setOpen, close } = usePopover<HTMLDivElement>({ returnFocus: bellRef });
-  const {
-    notifications,
-    unreadCount,
-    loading,
-    error,
-    fetchNotifications,
-    markRead,
-    markAllRead,
-    dismiss,
-  } = useNotifications();
-  const [showAll, setShowAll] = useState(false);
+  const { open, setOpen, close } = usePopover<HTMLDivElement>();
+  const { notifications, unreadCount, loading, error, markRead, markAllRead, dismiss } =
+    useNotifications();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Handle escape key
@@ -44,7 +35,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
     if (!panel) return;
 
     const focusableElements = panel.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     );
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
@@ -97,7 +88,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
     }
   };
 
-  const handleLinkClick = async (notification: typeof notifications[0], e: React.MouseEvent) => {
+  const handleLinkClick = async (notification: (typeof notifications)[0], e: React.MouseEvent) => {
     // Mark as read when clicking a link
     if (!notification.is_read) {
       e.preventDefault();
@@ -109,7 +100,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
     }
   };
 
-  const getNotificationLink = (notification: typeof notifications[0]): string | null => {
+  const getNotificationLink = (notification: (typeof notifications)[0]): string | null => {
     if (!notification.links) return null;
 
     if (notification.type === 'po_status' && notification.links.purchase_order_id) {
@@ -128,7 +119,9 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
         }
         return `/products/search?q=${encodeURIComponent(notification.title.replace('Low stock: ', '').replace('Out of stock: ', '').split(' (')[0])}`;
       }
-      const variantPart = notification.links.variant_id ? `/variants/${notification.links.variant_id}` : '';
+      const variantPart = notification.links.variant_id
+        ? `/variants/${notification.links.variant_id}`
+        : '';
       return `/products/${notification.links.product_id}${variantPart}`;
     }
 
@@ -151,10 +144,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
       >
         <span aria-hidden="true">🔔</span>
         {unreadCount > 0 && (
-          <span
-            className="notification-badge"
-            aria-hidden="true"
-          >
+          <span className="notification-badge" aria-hidden="true">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -183,7 +173,11 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
 
           {loading && <div className="notification-loading">Loading notifications…</div>}
 
-          {error && <div className="notification-error" role="alert">{error}</div>}
+          {error && (
+            <div className="notification-error" role="alert">
+              {error}
+            </div>
+          )}
 
           {!loading && !error && notifications.length === 0 && (
             <div className="notification-empty">
@@ -208,8 +202,8 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
                           {notification.type === 'low_stock'
                             ? 'Low stock'
                             : notification.type === 'out_of_stock'
-                            ? 'Out of stock'
-                            : 'Order'}
+                              ? 'Out of stock'
+                              : 'Order'}
                         </span>
                         <time
                           className="notification-time"

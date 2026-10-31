@@ -17,8 +17,8 @@ from app.modules.notifications._internal.service import (
     unread_count,
 )
 from app.modules.notifications.service import (
-    NotificationsService,
     NotificationData,
+    NotificationsService,
     StockAlertData,
 )
 

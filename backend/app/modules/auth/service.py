@@ -155,7 +155,6 @@ def stock_alert_notification_recipients(db: Session, *, location_id: int) -> lis
     """Return IDs of ACTIVE users who hold NOTIFICATIONS_VIEW and either see all locations
     (Admin, Manager) or are assigned to the given location (Staff). Cashiers excluded.
     Deactivated users are excluded. Called from notifications module when a stock alert fires."""
-    from app.modules.auth.service import Permission
     from app.modules.auth._internal.models import User
 
     # Admin and Manager see all locations, Staff only their own location
