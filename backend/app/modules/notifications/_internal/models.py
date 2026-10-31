@@ -39,11 +39,29 @@ class Notification(Base):
     reference_id: Mapped[int | None]
     is_read: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         CheckConstraint("type IN ('low_stock', 'out_of_stock', 'po_status')", name="type"),
         Index("ix_notifications_recipient_unread", "recipient_user_id", "is_read", "created_at"),
+        Index(
+            "ix_notifications_one_active_per_recipient_alert",
+            "recipient_user_id",
+            "type",
+            "reference_type",
+            "reference_id",
+            unique=True,
+            postgresql_where="resolved_at IS NULL AND dismissed_at IS NULL AND reference_type = 'stock_alert'",
+        ),
+        Index(
+            "ix_notifications_recipient_active_created",
+            "recipient_user_id",
+            "dismissed_at",
+            "resolved_at",
+            "created_at",
+        ),
     )
 
 

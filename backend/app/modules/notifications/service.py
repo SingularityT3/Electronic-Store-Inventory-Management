@@ -21,6 +21,24 @@ class StockAlertData:
     threshold: int
 
 
+@dataclass(frozen=True)
+class NotificationData:
+    id: int
+    recipient_user_id: int
+    type: str
+    title: str
+    message: str
+    location_id: int | None
+    location_name: str | None
+    reference_type: str | None
+    reference_id: int | None
+    is_read: bool
+    read_at: object | None
+    dismissed_at: object | None
+    resolved_at: object | None
+    created_at: object
+
+
 class NotificationsService(Protocol):
     """Operations the `notifications` module offers to other modules.
 
@@ -62,3 +80,22 @@ class NotificationsService(Protocol):
         po_number: str,
         status: str,
     ) -> None: ...
+
+    def list_user_notifications(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        limit: int = 20,
+        offset: int = 0,
+        unread_only: bool = False,
+        include_read: bool = True,
+    ) -> list[NotificationData]: ...
+
+    def unread_count(self, db: Session, *, user_id: int) -> int: ...
+
+    def mark_read(self, db: Session, *, user_id: int, notification_id: int) -> None: ...
+
+    def mark_all_read(self, db: Session, *, user_id: int) -> None: ...
+
+    def dismiss(self, db: Session, *, user_id: int, notification_id: int) -> None: ...
