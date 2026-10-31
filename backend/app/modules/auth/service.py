@@ -63,6 +63,10 @@ class AuthService(Protocol):
     dependency exported by this module.
     """
 
+    def stock_alert_notification_recipients(
+        self, db: Session, *, location_id: int
+    ) -> list[int]: ...
+
 
 class LocationValidator(Protocol):
     """Composition-root supplied validation for stock-owned locations."""
@@ -144,6 +148,34 @@ def verify_override(
         full_name=outcome.user.full_name,
         role=outcome.user.role,
         location_id=outcome.user.location_id,
+    )
+
+
+def stock_alert_notification_recipients(db: Session, *, location_id: int) -> list[int]:
+    """Return IDs of ACTIVE users who hold NOTIFICATIONS_VIEW and either see all locations
+    (Admin, Manager) or are assigned to the given location (Staff). Cashiers excluded.
+    Deactivated users are excluded. Called from notifications module when a stock alert fires."""
+    from app.modules.auth.service import Permission
+    from app.modules.auth._internal.models import User
+
+    # Admin and Manager see all locations, Staff only their own location
+    return list(
+        db.scalars(
+            select(User.id)
+            .where(
+                User.is_active,
+                User.role.in_(("admin", "manager", "staff")),
+            )
+            .where(
+                # Admin and Manager get all alerts
+                (User.role.in_(("admin", "manager")))
+                | (
+                    # Staff only gets alerts for their assigned location
+                    (User.role == "staff") & (User.location_id == location_id)
+                )
+            )
+            .order_by(User.id)
+        )
     )
 
 

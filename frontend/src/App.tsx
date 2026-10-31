@@ -24,6 +24,7 @@ import {
 } from './modules/sales';
 import { LowStockReportPage, StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
+import { NotificationsPage } from './modules/notifications';
 import {
   POReceivingPage,
   PurchaseOrdersPage,
@@ -126,6 +127,14 @@ export default function App() {
           element={
             <RequirePermission permission="reports.view" what="reports">
               <LowStockReportPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <RequirePermission permission="notifications.view" what="notifications">
+              <NotificationsPage />
             </RequirePermission>
           }
         />

@@ -321,3 +321,38 @@ deleting a product or variant, or adding a product's first variant, resolves the
 low/out-of-stock alerts through `notifications.resolve_stock_alerts`. Reorder threshold changes
 are audited as `reorder_settings_updated`; the Stock levels screen edits them per item and
 location.
+
+## In-app notifications (`notifications` module)
+
+The `notifications` module manages in-app alerts for low stock, out of stock, and purchase order
+status changes. It owns its tables (`notifications`, `stock_alerts`) and exposes a public
+service interface (`app.modules.notifications.service`) with:
+
+- `reevaluate_stock_alert`: called by `stock.update_stock` after every stock delta (sale,
+  receipt, return, transfer, adjustment). It creates or updates a `StockAlert` row and manages
+  the notification lifecycle in the same transaction:
+  - New alert → creates one `Notification` per recipient (see below).
+  - Alert resolved (stock above threshold) → marks active notifications `resolved_at`.
+  - Alert type changes (low ↔ out of stock) → resolves old notifications, creates new ones.
+  - Same type, quantity changes → updates the `message` of active notifications.
+  - Dismissed notifications stay dismissed until a new alert event occurs.
+- `stock_alert_notification_recipients` (in `auth` module, per layer rule 3): determines who
+  receives a stock alert at a given location. Admin and Manager receive alerts for all
+  locations. Staff receives alerts only for their assigned location. Cashier receives none.
+  The list is derived from active users with `notifications.view` permission.
+- `list_user_notifications`, `unread_count`, `mark_read`, `mark_all_read`, `dismiss`: user-facing
+  API for the notification panel (bell) and the `/notifications` page.
+- `record_purchase_order_status`: called by `purchasing` when a PO is submitted, partially
+  received, fully received, or cancelled. Creates one notification per recipient (users with
+  `purchase_orders.manage`).
+
+Deduplication: a partial unique index on
+`(recipient_user_id, reference_type, reference_id) WHERE dismissed_at IS NULL AND resolved_at IS NULL`
+prevents duplicate active notifications for the same alert/PO per user.
+
+Frontend: a notification bell in the header shows an unread count and opens a popover panel with
+the latest 10 notifications (newest first). Each item shows type badge, title, message, relative
+time, and actions: "View order" / "View product" link, optional "Create PO" link (for users with
+`purchase_orders.manage`), "Mark as read", and "Dismiss". A full page at `/notifications`
+provides pagination, filtering (All/Unread), and the same actions. Optimistic UI updates with
+rollback on error; polling refreshes the unread count every 60 s while the tab is visible.
