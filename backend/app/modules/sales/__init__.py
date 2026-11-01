@@ -15,6 +15,7 @@ from app.modules.sales.service import (
     SaleLookupLineData,
     SalesService,
     SaleStockError,
+    SalesTotalsByProduct,
     SaleTrackingError,
     compute_line_refund,
     compute_sale_return_status,
@@ -26,6 +27,7 @@ from app.modules.sales.service import (
     process_return,
     restore_returned_batch_units,
     restore_returned_serials,
+    sales_totals_by_product,
 )
 
 __all__ = [
@@ -40,6 +42,8 @@ __all__ = [
     "SaleStockError",
     "SaleTrackingError",
     "SalesService",
+    "SalesTotalsByProduct",
+    "sales_totals_by_product",
     "compute_line_refund",
     "compute_sale_return_status",
     "get_credit_note",
