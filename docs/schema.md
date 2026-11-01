@@ -74,6 +74,9 @@ Notes:
 - Category cycles deeper than self-parenting are left to the application (#10).
 - Migration 0013 blocks DELETE inside eight calendar years for sales, returns, invoices, and child/link rows; it always blocks TRUNCATE and blocks changes to transaction date fields.
 - Products and variants are soft-deleted (`is_active`), because sales and stock refer to them.
+- Sales trend aggregation uses the existing `sales(location_id, sold_at)`,
+  `sales(sold_at)`, `sale_lines(sale_id)` and `return_lines(sale_line_id)` indexes; no additional
+  migration index was needed.
 - An item is a product (`variant_id` NULL) or one of its variants. A product with variants is
   stocked per variant.
 - `category_attributes.allowed_values` is either a non-empty JSON array of strings or NULL for

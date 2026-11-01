@@ -12,7 +12,7 @@ Status:
 
 Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend/src`. Tests written for this table are named after their ID (`test_fr1_1_it_3_...` in `test_plan_cases.py`).
 
-Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
+Totals: 226 cases, 153 automated, 20 partial, 1 manual, 52 pending.
 
 
 ## 3.1 Product Management
@@ -143,7 +143,7 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 | FR4.1-UT-3 | Pending |  | Sales transactions are not in main yet (#24) |
 | FR4.1-IT-1 | Pending |  | Sales transactions are not in main yet (#24) |
 | FR4.1-IT-2 | Pending |  | Sales transactions are not in main yet (#24) |
-| FR4.1-IT-3 | Pending |  | Sales transactions are not in main yet (#24); sales trend report is #31 |
+| FR4.1-IT-3 | Automated | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | The report includes a sale from the current UTC date range |
 | FR4.1-ST-1 | Pending |  | Sales transactions are not in main yet (#24); Invoices are not in main yet (#26) |
 | FR4.1-ST-2 | Pending |  | Sales transactions are not in main yet (#24) |
 | FR4.2-UT-1 | Automated | `test_returns.py::test_fr4_2_ut_1_valid_return_generates_credit_note` |  |
@@ -151,8 +151,8 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 | FR4.2-UT-3 | Automated | `test_returns.py::test_fr4_2_ut_3_invoice_lookup_valid_and_invalid` |  |
 | FR4.2-IT-1 | Automated | `test_returns.py::test_fr4_2_it_1_damaged_line_not_restocked_and_mixed_return` ; `test_constraints.py::test_damaged_return_cannot_be_restocked` |  |
 | FR4.2-IT-2 | Automated | `test_returns.py::test_fr4_2_it_2_late_return_manager_override_and_lockout` |  |
-| FR4.2-IT-3 | Pending | `test_returns.py::test_fr4_2_it_3_net_sales_data_aggregatable` | Sales trend report is #31; test confirms return data supports netting |
-| FR4.2-ST-1 | Partial | `test_returns.py::test_fr4_2_st_1_end_to_end_sale_to_return` | End-to-end return automated through API; sales trend netting is pending #31 |
+| FR4.2-IT-3 | Automated | `test_returns.py::test_fr4_2_it_3_net_sales_data_aggregatable` ; `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | Return data and the report's net totals are covered |
+| FR4.2-ST-1 | Partial | `test_returns.py::test_fr4_2_st_1_end_to_end_sale_to_return` ; `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | API sale-to-return flow and report netting are automated; browser workflow remains outside backend tests |
 | FR4.2-ST-2 | Automated | `test_returns.py::test_authorization_and_location_scoping` |  |
 | FR4.3-UT-1 | Automated | `test_invoices.py::test_fr4_3_ut_1_invoice_snapshot_is_available_with_the_sale` |  |
 | FR4.3-UT-2 | Automated | `test_invoices.py::test_fr4_3_ut_2_sale_persists_required_invoice_snapshot` |  |
@@ -196,7 +196,7 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 
 ## 3.6 Reporting and Analytics
 
-40 cases: 20 automated, 2 partial, 18 pending.
+40 cases: 25 automated, 5 partial, 10 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -208,14 +208,14 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 | FR6.1-IT-3 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` |  |
 | FR6.1-ST-1 | Automated | `test_reporting_stock.py::test_valuation_is_live_and_can_filter_location` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` |  |
 | FR6.1-ST-2 | Automated | `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
-| FR6.2-UT-1 | Pending |  | Sales trend report is #31 |
-| FR6.2-UT-2 | Pending |  | Sales trend report is #31 |
-| FR6.2-UT-3 | Pending |  | Sales trend report is #31 |
-| FR6.2-IT-1 | Pending |  | Sales trend report is #31 |
-| FR6.2-IT-2 | Pending |  | Sales trend report is #31 |
-| FR6.2-IT-3 | Pending |  | Sales trend report is #31 |
-| FR6.2-ST-1 | Pending |  | Sales trend report is #31 |
-| FR6.2-ST-2 | Pending |  | Sales trend report is #31 |
+| FR6.2-UT-1 | Automated | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | Ranking and net totals are checked against known sale and return rows |
+| FR6.2-UT-2 | Automated | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | Zero-sales products are included and the limit is exercised by the response |
+| FR6.2-UT-3 | Automated | `test_sales_trend.py::test_fr6_2_ut_3_sales_trend_rejects_invalid_ranges` | Invalid date ordering is rejected; boundary transaction coverage is in the report integration test |
+| FR6.2-IT-1 | Automated | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | Processed returns reduce net units and net amount |
+| FR6.2-IT-2 | Partial | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | All-location aggregation and stock are covered; location split and variant roll-up remain untested |
+| FR6.2-IT-3 | Partial | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` | Shared CSV/PDF infrastructure is covered; sales-trend export parity is not yet asserted |
+| FR6.2-ST-1 | Automated | `test_sales_trend.py::test_fr6_2_ut_1_and_it_1_sales_trend_ranks_and_nets_returns` | Report current stock is compared with seeded stock data |
+| FR6.2-ST-2 | Partial | `test_rbac.py::test_api_enforces_the_matrix_for_every_role` | Permission enforcement follows the report permission matrix; dedicated sales-trend export assertions remain |
 | FR6.3-UT-1 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
 | FR6.3-UT-2 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
 | FR6.3-UT-3 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
