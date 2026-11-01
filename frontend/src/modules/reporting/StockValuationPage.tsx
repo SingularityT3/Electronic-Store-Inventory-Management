@@ -139,6 +139,7 @@ export default function StockValuationPage() {
       <header className="page-header">
         <h1>Stock valuation</h1>
         <Link to="/reports/reorder">Low-stock &amp; reorder report</Link>
+        <Link to="/reports/sales-trend">Sales trend report</Link>
       </header>
 
       {error && (

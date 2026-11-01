@@ -22,7 +22,7 @@ import {
   ReturnsPage,
   SalesHistoryPage,
 } from './modules/sales';
-import { LowStockReportPage, StockValuationPage } from './modules/reporting';
+import { LowStockReportPage, SalesTrendReportPage, StockValuationPage } from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import { NotificationsPage } from './modules/notifications';
 import {
@@ -127,6 +127,14 @@ export default function App() {
           element={
             <RequirePermission permission="reports.view" what="reports">
               <LowStockReportPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="/reports/sales-trend"
+          element={
+            <RequirePermission permission="reports.view" what="reports">
+              <SalesTrendReportPage />
             </RequirePermission>
           }
         />
