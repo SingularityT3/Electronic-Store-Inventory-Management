@@ -266,18 +266,18 @@ Totals: 226 cases, 146 automated, 17 partial, 1 manual, 62 pending.
 
 ## 3.8 Notifications
 
-16 cases: 11 automated, 1 partial, 4 pending.
+16 cases: 16 automated, 0 partial, 0 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
 | FR8.1-UT-1 | Automated | `test_notifications.py::test_shared_stock_updates_create_distinct_alerts_and_clear_on_recovery` |  |
 | FR8.1-UT-2 | Automated | `test_plan_cases.py::test_fr2_3_ut_3_and_fr8_1_ut_2_alert_only_at_or_below_threshold` |  |
-| FR8.1-UT-3 | Pending |  | Marking a notification read is #28 |
+| FR8.1-UT-3 | Automated | `test_notifications.py::test_notification_feed_is_recipient_scoped_and_chronological` ; `fe:modules/notifications/NotificationPanel.test.tsx::mark as read and dismiss work with optimistic updates` | Notification list, mark read, mark all read, dismiss |
 | FR8.1-IT-1 | Automated | `test_notifications.py::test_alerts_are_location_scoped_and_align_with_reorder_report` |  |
 | FR8.1-IT-2 | Automated | `test_notifications.py::test_alerts_are_location_scoped_and_align_with_reorder_report` |  |
 | FR8.1-IT-3 | Automated | `test_notifications.py::test_shared_stock_updates_create_distinct_alerts_and_clear_on_recovery` |  |
-| FR8.1-ST-1 | Pending |  | Notification screen is #28 |
-| FR8.1-ST-2 | Automated | `test_rbac.py::test_role_permissions_match_the_matrix` ; `test_notifications.py::test_threshold_changes_reevaluate_immediately_and_cashier_is_denied` |  |
+| FR8.1-ST-1 | Automated | `fe:modules/notifications/NotificationPanel.test.tsx::panel shows notifications with links and create PO` ; `fe:modules/notifications/NotificationsPage.test.tsx::pagination and filter work` | Notification bell panel and full page |
+| FR8.1-ST-2 | Automated | `test_notifications.py::test_notification_feed_respects_role_permissions` ; `fe:shell/shell.test.tsx::cashier header notification bell: false` |  |
 | FR8.2-UT-1 | Automated | `test_purchase_orders.py::test_create_list_view_edit_and_submit_po_calculates_totals_and_audits` |  |
 | FR8.2-UT-2 | Automated | `test_purchase_orders.py::test_receipt_hook_advances_lifecycle_notifies_and_freezes_lines` |  |
 | FR8.2-UT-3 | Automated | `test_purchase_orders.py::test_create_list_view_edit_and_submit_po_calculates_totals_and_audits` |  |

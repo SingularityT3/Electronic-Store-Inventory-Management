@@ -46,6 +46,7 @@ PostgreSQL 16, managed with Alembic (`backend/migrations/`). The models live in 
 | Non-negative stock (FR-2.1, NFR-14)                 | `CHECK (quantity >= 0)` on `stock_levels`                                                 |
 | One stock row per item per location (FR-2.1)        | `UNIQUE NULLS NOT DISTINCT (product_id, variant_id, location_id)`                         |
 | One current stock alert per item per location (#19) | `UNIQUE NULLS NOT DISTINCT (product_id, variant_id, location_id)` on `stock_alerts`; a NULL alert type means resolved. |
+| No duplicate active notifications per user/alert (#28) | Partial unique index on `notifications`: `(recipient_user_id, reference_type, reference_id) WHERE dismissed_at IS NULL AND resolved_at IS NULL` |
 | Adjustment needs a reason (FR-2.4)                  | `CHECK` on `stock_movements`: an `adjustment` needs a `reason_code` and a non-blank `reason` |
 | Unique serial number (FR-2.5)                       | `UNIQUE` on `serial_numbers.serial_number`. A unit appears on one receipt line.           |
 | Product tracking mode (FR-2.5)                       | `products.tracking_mode` is `untracked`, `batch`, or `serial`, defaulting to `untracked`. |
@@ -94,6 +95,9 @@ Columns are abbreviated to keys and the main fields.
 erDiagram
     roles ||--o{ users : "role"
     users ||--o{ notifications : "recipient"
+    locations ||--o{ stock_alerts : "location"
+    products ||--o{ stock_alerts : "product"
+    product_variants |o--o{ stock_alerts : "variant"
 
     categories ||--o{ categories : "parent"
     categories ||--o{ products : ""
@@ -157,6 +161,36 @@ erDiagram
         int location_id "no FK (stock owns locations)"
         bool is_active
         timestamptz locked_until
+    }
+    notifications {
+        bigint id PK
+        int recipient_user_id "no FK (auth owns users)"
+        text type "low_stock | out_of_stock | po_status"
+        text title
+        text message
+        bool is_read
+        timestamptz created_at
+        timestamptz read_at
+        timestamptz dismissed_at
+        timestamptz resolved_at
+        int location_id "no FK (stock owns locations)"
+        text reference_type
+        int reference_id
+    }
+    stock_alerts {
+        int id PK
+        int product_id "no FK (product owns products)"
+        int variant_id "no FK (product owns variants)"
+        int location_id "no FK (stock owns locations)"
+        text product_name "snapshot"
+        text sku "snapshot"
+        text variant_sku "snapshot"
+        text location_name "snapshot"
+        int quantity
+        int threshold
+        text alert_type "low_stock | out_of_stock | NULL (resolved)"
+        timestamptz resolved_at
+        UNIQUE NULLS NOT DISTINCT (product_id, variant_id, location_id)
     }
     audit_log {
         bigint id PK
