@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, api } from '../../api';
 import { useAuth } from '../auth';
 import { productApi, type Product } from '../product/api';
@@ -49,6 +49,9 @@ export default function PosPage() {
   const [invoiceContent, setInvoiceContent] = useState<DocumentContent | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchResetKey, setSearchResetKey] = useState(0);
+  const autoAddedKey = useRef('');
 
   useEffect(() => {
     if (!canChooseLocation) {
@@ -109,6 +112,25 @@ export default function PosPage() {
     };
   }, [locationId, query]);
 
+  useEffect(() => {
+    if (!query || loading || products.length !== 1) return;
+    const rows = availability.filter((row) => row.product_id === products[0].id);
+    const normalized = query.trim().toLowerCase();
+    const exactRows = rows.filter(
+      (row) =>
+        row.sku.toLowerCase() === normalized || row.variant_sku?.toLowerCase() === normalized,
+    );
+    const row = exactRows.length === 1 ? exactRows[0] : rows.length === 1 ? rows[0] : null;
+    if (!row) return;
+    const key = `${query}:${row.product_id}:${row.variant_id ?? ''}`;
+    if (autoAddedKey.current === key) return;
+    autoAddedKey.current = key;
+    add(row);
+    setQuery('');
+    setSearchResetKey((current) => current + 1);
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [availability, loading, products, query]);
+
   const subtotal = useMemo(
     () => amount(cart.reduce((sum, line) => sum + Number(line.unit_price) * line.quantity, 0)),
     [cart],
@@ -158,7 +180,7 @@ export default function PosPage() {
     );
   }
 
-  async function completeSale() {
+  const completeSale = useCallback(async () => {
     if (submitting || !locationId) return;
     setSubmitting(true);
     setError('');
@@ -200,7 +222,31 @@ export default function PosPage() {
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [
+    cart,
+    idempotencyKey,
+    locationId,
+    paymentAmount,
+    paymentMethod,
+    reference,
+    submitting,
+    total,
+  ]);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if (event.altKey && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (event.altKey && event.key === 'Enter' && cart.length > 0) {
+        event.preventDefault();
+        void completeSale();
+      }
+    }
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [cart.length, completeSale]);
 
   if (sale) {
     return (
@@ -261,15 +307,27 @@ export default function PosPage() {
         </FormField>
       )}
       {error && (
-        <p role="alert" className="error">
+        <p role="alert" aria-live="assertive" className="error">
           {error}
         </p>
       )}
       <div className="pos-grid">
         <section>
-          <SearchBox onSearch={setQuery} label="Find a product" />
+          <SearchBox
+            onSearch={setQuery}
+            label="Find a product"
+            autoFocus
+            inputRef={searchInputRef}
+            resetKey={searchResetKey}
+          />
+          <p className="form-hint">
+            Shortcuts: Alt+S focuses search; Alt+Enter completes the sale.
+          </p>
           {loading && <p>Searching...</p>}
           {!loading && query && products.length === 0 && <EmptyState message="No products found" />}
+          {!loading && query && products.length > 1 && (
+            <p role="status">Several products match. Choose the intended product below.</p>
+          )}
           {products.map((product) => {
             const rows = availability.filter((row) => row.product_id === product.id);
             return (

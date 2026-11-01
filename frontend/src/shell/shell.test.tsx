@@ -153,6 +153,27 @@ test('the shell has a header, a menu and a content area', async () => {
   expect(screen.getByRole('main')).toBeInTheDocument();
 });
 
+test('the dashboard shows role-specific common tasks', async () => {
+  signedInAs('cashier');
+  renderAt('/');
+  const tasks = await screen.findByRole('region', { name: 'Common tasks' });
+  expect(within(tasks).getByRole('link', { name: 'Start a sale' })).toHaveAttribute(
+    'href',
+    '/sales',
+  );
+  expect(within(tasks).getByRole('link', { name: 'Process a return' })).toHaveAttribute(
+    'href',
+    '/returns',
+  );
+  expect(within(tasks).getByRole('link', { name: 'Find a product' })).toHaveAttribute(
+    'href',
+    '/products/search',
+  );
+  expect(
+    within(tasks).queryByRole('link', { name: 'Receive a purchase order' }),
+  ).not.toBeInTheDocument();
+});
+
 test('the notification panel displays PO updates in chronological order with timestamps', async () => {
   const notifications = [
     {

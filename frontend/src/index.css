@@ -206,6 +206,21 @@ body {
   justify-content: space-between;
 }
 
+.common-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.common-task {
+  display: inline-block;
+  padding: 0.65rem 0.85rem;
+  color: #1d4ed8;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+}
+
 .audit-filters {
   display: flex;
   flex-wrap: wrap;
