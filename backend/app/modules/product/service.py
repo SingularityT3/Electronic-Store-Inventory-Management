@@ -49,6 +49,16 @@ class SaleProduct:
     tracking_mode: str = "untracked"
 
 
+@dataclass(frozen=True)
+class ProductCatalogItem:
+    product_id: int
+    sku: str
+    name: str
+    brand: str
+    category_name: str
+    is_active: bool
+
+
 def product_stock_items(
     db: Session, product_ids: Iterable[int] | None = None
 ) -> list[ProductStockItem]:
@@ -219,6 +229,25 @@ class ProductService(Protocol):
     """
 
     # Keep catalog consumers dependent on this public contract rather than private models.
+
+
+def product_catalog_items(db: Session) -> list[ProductCatalogItem]:
+    """Return one catalog row per product, including inactive products."""
+    return [
+        ProductCatalogItem(
+            product_id=product.id,
+            sku=product.sku,
+            name=product.name,
+            brand=product.brand,
+            category_name=category_name,
+            is_active=product.is_active,
+        )
+        for product, category_name in db.execute(
+            select(Product, Category.name)
+            .join(Category, Category.id == Product.category_id)
+            .order_by(Product.name, Product.id)
+        )
+    ]
 
 
 class StockCheck(Protocol):

@@ -110,6 +110,17 @@ class PreparedLine:
     serial_numbers: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class SalesTotalsByProduct:
+    product_id: int
+    units_sold: int
+    units_returned: int
+    net_units: int
+    gross_amount: Decimal
+    refunded_amount: Decimal
+    net_amount: Decimal
+
+
 def _money(value: Decimal) -> Decimal:
     return value.quantize(CENT, rounding=ROUND_HALF_UP)
 
@@ -1385,3 +1396,70 @@ def get_credit_note(db: Session, return_id: int) -> ReturnCreditNote:
 
 class SalesService(Protocol):
     def record(self, db: Session, **kwargs: object) -> Sale: ...
+
+    def sales_totals_by_product(
+        self,
+        db: Session,
+        *,
+        start: datetime,
+        end: datetime,
+        location_id: int | None = None,
+    ) -> list[SalesTotalsByProduct]: ...
+
+
+def sales_totals_by_product(
+    db: Session,
+    *,
+    start: datetime,
+    end: datetime,
+    location_id: int | None = None,
+) -> list[SalesTotalsByProduct]:
+    """Aggregate sales in the period and all processed returns against those sale lines."""
+    returned = (
+        select(
+            ReturnLine.sale_line_id.label("sale_line_id"),
+            func.coalesce(func.sum(ReturnLine.quantity), 0).label("units_returned"),
+            func.coalesce(func.sum(ReturnLine.refund_amount), Decimal("0")).label(
+                "refunded_amount"
+            ),
+        )
+        .group_by(ReturnLine.sale_line_id)
+        .subquery()
+    )
+    query = (
+        select(
+            SaleLine.product_id,
+            func.sum(SaleLine.quantity).label("units_sold"),
+            func.coalesce(func.sum(returned.c.units_returned), 0).label("units_returned"),
+            func.sum(SaleLine.line_total).label("gross_amount"),
+            func.coalesce(func.sum(returned.c.refunded_amount), Decimal("0")).label(
+                "refunded_amount"
+            ),
+        )
+        .join(Sale, Sale.id == SaleLine.sale_id)
+        .outerjoin(returned, returned.c.sale_line_id == SaleLine.id)
+        .where(Sale.status == "completed", Sale.sold_at >= start, Sale.sold_at < end)
+        .group_by(SaleLine.product_id)
+        .order_by(SaleLine.product_id)
+    )
+    if location_id is not None:
+        query = query.where(Sale.location_id == location_id)
+
+    totals = []
+    for product_id, units_sold, units_returned, gross_amount, refunded_amount in db.execute(query):
+        sold = int(units_sold or 0)
+        returned_units = int(units_returned or 0)
+        gross = Decimal(gross_amount or 0)
+        refunded = Decimal(refunded_amount or 0)
+        totals.append(
+            SalesTotalsByProduct(
+                product_id=product_id,
+                units_sold=sold,
+                units_returned=returned_units,
+                net_units=max(sold - returned_units, 0),
+                gross_amount=gross,
+                refunded_amount=refunded,
+                net_amount=gross - refunded,
+            )
+        )
+    return totals

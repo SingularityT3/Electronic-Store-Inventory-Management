@@ -287,6 +287,27 @@ and limited by `PRODUCT_IMAGE_MAX_BYTES` (5 MiB by default). Files are stored in
 `product-images` Docker volume and served only through authenticated API routes with
 `X-Content-Type-Options: nosniff`. Soft deletion retains image records and files for history.
 
+## Reporting
+
+The reporting module exposes the stock valuation and reorder reports and the
+`GET /api/reporting/sales-trend` sales trend report. The sales module performs one grouped
+aggregation of completed sale lines and processed return lines; reporting merges those totals
+with the product module's catalog service and one batched stock-position read. Product variants
+are rolled up to their product.
+
+The report uses a half-open UTC range: the selected dates are interpreted as UTC midnight and
+the end date is exclusive at the following midnight. No store-timezone setting exists yet, so
+UTC is the explicit fallback. Returns are attributed to the original sale period even when the
+return is processed later; this keeps regenerated historical reports net of all processed
+returns. Damaged and resaleable returns both reduce units and refunded amount.
+
+Rows sort by net units descending, net amount descending, product name and product ID. Competition
+ranks are assigned, so ties share a rank. Active zero-sales products appear at the bottom;
+inactive products appear only when they have sales. Best rows are returned highest-first and worst
+rows lowest-first, with overlap permitted when the catalog contains fewer than twice the limit.
+Manager and Admin users may filter by location or aggregate all locations. CSV and PDF exports
+reuse the same full ranked rows and totals as the JSON report.
+
 ## User management
 
 Admins manage accounts through `/api/auth/users` (paged list, detail, create, edit,
