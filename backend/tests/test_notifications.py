@@ -211,14 +211,16 @@ def test_notification_feed_is_recipient_scoped_and_chronological(client, make_us
     response = client.get("/api/notifications")
 
     assert response.status_code == 200
+    # Panel shows newest first (changed from oldest first)
     assert [row["message"] for row in response.json()] == [
-        "PO-3010: Submitted",
         "PO-3010: Received",
+        "PO-3010: Submitted",
     ]
     timestamps = [
         datetime.fromisoformat(row["created_at"].replace("Z", "+00:00")) for row in response.json()
     ]
-    assert timestamps == sorted(timestamps)
+    # Newest first
+    assert timestamps == sorted(timestamps, reverse=True)
     assert all(row["created_at"] for row in response.json())
 
 

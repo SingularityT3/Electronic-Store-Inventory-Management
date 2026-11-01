@@ -58,7 +58,7 @@ function signedInAs(role: Role) {
     'fetch',
     vi.fn((url: string) => {
       if (url === '/api/auth/me') return reply(200, userWithRole(role));
-      if (url === '/api/notifications') return reply(200, []);
+      if (url.startsWith('/api/notifications')) return reply(200, []);
       return reply(404, { detail: 'Not found' });
     }),
   );
@@ -190,7 +190,7 @@ test('the notification panel displays PO updates in chronological order with tim
           json: async () => userWithRole('manager'),
         });
       }
-      if (url === '/api/notifications') {
+      if (url.startsWith('/api/notifications')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => notifications });
       }
       return Promise.resolve({
@@ -304,7 +304,16 @@ test.each([
 });
 
 test('the notification bell opens an empty notifications panel', async () => {
-  signedInAs('manager');
+  const reply = (status: number, body?: unknown) =>
+    Promise.resolve({ ok: status < 400, status, json: async () => body });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url === '/api/auth/me') return reply(200, userWithRole('manager'));
+      if (url.startsWith('/api/notifications')) return reply(200, []);
+      return reply(404, { detail: 'Not found' });
+    }),
+  );
   renderAt('/');
   await userEvent.click(await screen.findByRole('button', { name: 'Notifications' }));
   expect(screen.getByRole('region', { name: 'Notifications' })).toHaveTextContent(
