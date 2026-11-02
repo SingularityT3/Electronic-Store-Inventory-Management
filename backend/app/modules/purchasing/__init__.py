@@ -6,8 +6,20 @@ Public surface of the `purchasing` module. Other modules may import from here on
 
 from app.modules.purchasing.service import (
     PurchasingService,
+    SupplierReportOrder,
+    SupplierReportPrice,
+    SupplierReportSupplier,
     supplier_catalog_costs,
+    supplier_report_sources,
     update_purchase_order_receipt_status,
 )
 
-__all__ = ["PurchasingService", "supplier_catalog_costs", "update_purchase_order_receipt_status"]
+__all__ = [
+    "PurchasingService",
+    "SupplierReportOrder",
+    "SupplierReportPrice",
+    "SupplierReportSupplier",
+    "supplier_catalog_costs",
+    "supplier_report_sources",
+    "update_purchase_order_receipt_status",
+]

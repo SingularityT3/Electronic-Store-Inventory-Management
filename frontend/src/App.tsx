@@ -22,7 +22,12 @@ import {
   ReturnsPage,
   SalesHistoryPage,
 } from './modules/sales';
-import { LowStockReportPage, SalesTrendReportPage, StockValuationPage } from './modules/reporting';
+import {
+  LowStockReportPage,
+  SalesTrendReportPage,
+  StockValuationPage,
+  SupplierPerformanceReportPage,
+} from './modules/reporting';
 import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
 import { NotificationsPage } from './modules/notifications';
 import {
@@ -188,6 +193,8 @@ export default function App() {
               <POReceivingPage />
             ) : item.path === '/reports' ? (
               <StockValuationPage />
+            ) : item.path === '/reports/supplier-performance' ? (
+              <SupplierPerformanceReportPage />
             ) : (
               <PlaceholderPage title={item.label} />
             );

@@ -8,7 +8,14 @@ from app.modules.reporting.service import (
     ReportingService,
     reorder_rows,
     sales_trend_rows,
+    supplier_performance_rows,
     valuation_rows,
 )
 
-__all__ = ["ReportingService", "reorder_rows", "sales_trend_rows", "valuation_rows"]
+__all__ = [
+    "ReportingService",
+    "reorder_rows",
+    "sales_trend_rows",
+    "supplier_performance_rows",
+    "valuation_rows",
+]

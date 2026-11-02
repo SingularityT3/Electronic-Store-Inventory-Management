@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import App from '../App';
@@ -103,6 +103,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'Returns',
     'Sales history',
     'Reports',
+    'Supplier performance',
     'User management',
     'Audit log',
   ],
@@ -123,6 +124,7 @@ const EXPECTED_MENU: Record<Role, string[]> = {
     'Returns',
     'Sales history',
     'Reports',
+    'Supplier performance',
   ],
   staff: [
     'Dashboard',
@@ -151,6 +153,23 @@ test('the shell has a header, a menu and a content area', async () => {
   expect(screen.getByRole('banner')).toHaveTextContent('ESIMS');
   expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeInTheDocument();
   expect(screen.getByRole('main')).toBeInTheDocument();
+});
+
+test('staff and cashiers cannot see or directly open supplier performance reports', async () => {
+  signedInAs('staff');
+  renderAt('/reports/supplier-performance');
+
+  expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
+  expect(
+    within(await screen.findByRole('navigation', { name: 'Main menu' })).queryByRole('link', {
+      name: 'Supplier performance',
+    }),
+  ).not.toBeInTheDocument();
+
+  cleanup();
+  signedInAs('cashier');
+  renderAt('/reports/supplier-performance');
+  expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument();
 });
 
 test('the dashboard shows role-specific common tasks', async () => {

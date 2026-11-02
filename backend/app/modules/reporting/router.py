@@ -25,6 +25,7 @@ from app.modules.reporting.service import (
     reorder_table,
     sales_trend_rows,
     sales_trend_table,
+    supplier_performance_rows,
     valuation_rows,
     valuation_table,
 )
@@ -96,7 +97,44 @@ class SalesTrendOut(BaseModel):
     worst: list[SalesTrendItemOut]
 
 
-def _sales_period(date_from: date, date_to: date) -> tuple[datetime, datetime]:
+class SupplierPricePointOut(BaseModel):
+    recorded_at: datetime
+    unit_price: Decimal
+
+
+class SupplierProductPriceTrendOut(BaseModel):
+    product_id: int
+    product_name: str
+    sku: str
+    variant_id: int | None
+    price_points: list[SupplierPricePointOut]
+    first_price: Decimal
+    latest_price: Decimal
+    variance: Decimal | None
+    variance_percent: Decimal | None
+
+
+class SupplierPerformanceItemOut(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    purchase_order_count: int
+    total_order_value: Decimal
+    on_time_delivery_rate: Decimal | None
+    on_time_delivery_count: int
+    eligible_delivery_count: int
+    fulfilment_accuracy: Decimal | None
+    quantity_ordered: int
+    quantity_accepted: int
+    price_trends: list[SupplierProductPriceTrendOut]
+
+
+class SupplierPerformanceOut(BaseModel):
+    date_from: date
+    date_to: date
+    suppliers: list[SupplierPerformanceItemOut]
+
+
+def _report_period(date_from: date, date_to: date) -> tuple[datetime, datetime]:
     if date_from > date_to:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "date_from must be on or before date_to."
@@ -124,7 +162,7 @@ def _sales_trend(
 ) -> SalesTrendOut:
     if location_id is not None and not location_exists(db, location_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
-    start, end = _sales_period(date_from, date_to)
+    start, end = _report_period(date_from, date_to)
     report = sales_trend_rows(db, start=start, end=end, location_id=location_id)
     rows = report.rows
     return SalesTrendOut(
@@ -166,6 +204,70 @@ def sales_trend_report(
     )
 
 
+@router.get(
+    "/supplier-performance",
+    response_model=SupplierPerformanceOut,
+    dependencies=[Depends(require(Permission.REPORTS_VIEW))],
+)
+def supplier_performance_report(
+    db: Annotated[Session, Depends(get_session)],
+    date_from: date,
+    date_to: date,
+    supplier_ids: Annotated[list[int] | None, Query()] = None,
+) -> SupplierPerformanceOut:
+    if supplier_ids is not None and (
+        any(supplier_id < 1 for supplier_id in supplier_ids)
+        or len(supplier_ids) != len(set(supplier_ids))
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Supplier IDs must be positive and unique.",
+        )
+    start, end = _report_period(date_from, date_to)
+    reports = supplier_performance_rows(db, start=start, end=end, supplier_ids=supplier_ids)
+    if supplier_ids is not None and len(reports) != len(supplier_ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Supplier not found.")
+    return SupplierPerformanceOut(
+        date_from=date_from,
+        date_to=date_to,
+        suppliers=[
+            SupplierPerformanceItemOut(
+                supplier_id=report.supplier_id,
+                supplier_name=report.supplier_name,
+                purchase_order_count=report.purchase_order_count,
+                total_order_value=report.total_order_value,
+                on_time_delivery_rate=report.on_time_delivery_rate,
+                on_time_delivery_count=report.on_time_delivery_count,
+                eligible_delivery_count=report.eligible_delivery_count,
+                fulfilment_accuracy=report.fulfilment_accuracy,
+                quantity_ordered=report.quantity_ordered,
+                quantity_accepted=report.quantity_accepted,
+                price_trends=[
+                    SupplierProductPriceTrendOut(
+                        product_id=trend.product_id,
+                        product_name=trend.product_name,
+                        sku=trend.sku,
+                        variant_id=trend.variant_id,
+                        price_points=[
+                            SupplierPricePointOut(
+                                recorded_at=point.recorded_at,
+                                unit_price=point.unit_price,
+                            )
+                            for point in trend.price_points
+                        ],
+                        first_price=trend.first_price,
+                        latest_price=trend.latest_price,
+                        variance=trend.variance,
+                        variance_percent=trend.variance_percent,
+                    )
+                    for trend in report.price_trends
+                ],
+            )
+            for report in reports
+        ],
+    )
+
+
 @router.get("/sales-trend/export", dependencies=[Depends(require(Permission.REPORTS_VIEW))])
 def export_sales_trend(
     db: Annotated[Session, Depends(get_session)],
@@ -176,7 +278,7 @@ def export_sales_trend(
 ) -> Response:
     if location_id is not None and not location_exists(db, location_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
-    start, end = _sales_period(date_from, date_to)
+    start, end = _report_period(date_from, date_to)
     table = sales_trend_table(db, start=start, end=end, location_id=location_id)
     generated_at = datetime.now(UTC)
     headers = {

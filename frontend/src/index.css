@@ -268,6 +268,68 @@ body {
   background: #fff;
 }
 
+.supplier-report-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.supplier-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.supplier-performance-card {
+  min-width: 0;
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.supplier-performance-card h2,
+.supplier-performance-card h3 {
+  margin-top: 0;
+}
+
+.supplier-performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 0.75rem;
+}
+
+.supplier-performance-metrics div {
+  padding: 0.75rem;
+  background: #f3f4f6;
+}
+
+.supplier-performance-metrics dt {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.supplier-performance-metrics dd {
+  margin: 0.25rem 0 0;
+  font-weight: 700;
+}
+
+.supplier-price-trends {
+  padding-left: 1rem;
+}
+
+.supplier-price-trends > li {
+  margin: 0.75rem 0;
+}
+
+.supplier-price-trends span {
+  display: block;
+}
+
 .pager {
   display: flex;
   align-items: center;
