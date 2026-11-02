@@ -50,11 +50,16 @@ ORM object. It now:
 
 Both scenarios are now around 0.6 s at p95.
 
+The nightly run then failed on the 50,000-row valuation PDF: the renderer measured and wrapped
+every cell (about 700 rows per second, over 60 s in CI), and the script's 60 s client timeout
+crashed the run before the results file was written. Cells that fit on one line are now drawn
+directly, which brings that PDF to about 10 to 15 s; the script waits three times the report
+threshold, records a slow report as a failed check, and always writes the results file.
+
 ## Known limits
 
-- The PDF of the 50,000-row valuation report takes about 33 s, since the PDF library draws
-  roughly 1,500 rows per second. A 5,000-row PDF takes about 3 s and the per-location reports
-  stay under 10 s. CSV export of the full report takes about 1.5 s. If full-store PDFs matter,
-  filter by location or export CSV.
+- The PDF of the full 50,000-row valuation report still takes 10 to 15 s. A 5,000-row PDF takes
+  about 1 s and CSV export of the full report about 1.5 s. If full-store PDFs are slow on small
+  hardware, filter by location or export CSV.
 - The test runs against a local Postgres in Docker, so absolute times depend on the host. CI
   numbers are lower-bound checks of the 2 s target, not capacity planning.

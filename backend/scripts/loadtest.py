@@ -208,8 +208,8 @@ def start_api(url, port: int, workers: int) -> subprocess.Popen:
     raise RuntimeError("API did not start")
 
 
-def session(base: str, username: str) -> httpx.Client:
-    client = httpx.Client(base_url=base, timeout=60)
+def session(base: str, username: str, timeout: float = 60) -> httpx.Client:
+    client = httpx.Client(base_url=base, timeout=timeout)
     response = client.post("/api/auth/login", json={"username": username, "password": PASSWORD})
     response.raise_for_status()
     client.headers[CSRF_HEADER] = client.cookies.get(CSRF_COOKIE) or ""
@@ -342,7 +342,8 @@ def concurrency_phase(base: str, engine: Engine, results: Results, args) -> None
 
 
 def report_phase(base: str, results: Results, args: argparse.Namespace) -> None:
-    client = session(base, "lt_manager")
+    # Wait well past the threshold so a slow report fails its check instead of the run.
+    client = session(base, "lt_manager", timeout=args.report_threshold * 3)
     jobs = [
         ("valuation report (JSON)", "/api/reporting/valuation"),
         ("reorder report (JSON)", "/api/reporting/reorder"),
@@ -353,7 +354,13 @@ def report_phase(base: str, results: Results, args: argparse.Namespace) -> None:
     ]
     for label, path in jobs:
         start = time.perf_counter()
-        response = client.get(path)
+        try:
+            response = client.get(path)
+        except httpx.TimeoutException:
+            seconds = time.perf_counter() - start
+            results.reports.append((label, seconds, 0))
+            results.check(label, False, f"timed out after {seconds:.0f} s")
+            continue
         seconds = time.perf_counter() - start
         results.reports.append((label, seconds, len(response.content)))
         results.check(
@@ -441,11 +448,14 @@ def main() -> int:
         port = free_port()
         api = start_api(url, port, args.workers)
         base = f"http://127.0.0.1:{port}"
-        latency_phase(base, results, args)
-        concurrency_phase(base, engine, results, args)
-        report_phase(base, results, args)
-        if args.output:
-            write_report(args.output, results, args, rows)
+        try:
+            latency_phase(base, results, args)
+            concurrency_phase(base, engine, results, args)
+            report_phase(base, results, args)
+        finally:
+            # Write what was measured even if a phase failed, so CI keeps the artifact.
+            if args.output:
+                write_report(args.output, results, args, rows)
     finally:
         if api:
             api.terminate()
