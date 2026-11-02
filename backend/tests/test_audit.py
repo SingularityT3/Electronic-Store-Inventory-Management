@@ -240,3 +240,79 @@ def test_only_admin_can_view_the_log(client, make_user, conn, role, path):
 
 def test_signed_out_user_cannot_view_the_log(client):
     assert client.get("/api/audit/entries").status_code == 401
+
+
+# FR5.3-ST-1
+def test_mixed_activity_across_all_roles_is_in_the_trail_in_order(client, make_user, db):
+    from tests.test_products import category, product_payload
+    from tests.test_sales import _location, _product, _stock, _total
+
+    store = _location(db)
+    item = _product(db, price="100.00")
+    _stock(db, item, store, 10)
+    cat = category(db)
+    db.commit()
+    names = {role: f"trail_{role}" for role in ("admin", "manager", "staff", "cashier")}
+    for role, username in names.items():
+        make_user(
+            username, role=role, location_id=store.id if role in {"staff", "cashier"} else None
+        )
+
+    def session(role: str) -> None:
+        client.post("/api/auth/logout")
+        assert login(client, names[role]).status_code == 200
+
+    assert login(client, names["manager"], "wrong-password").status_code == 401
+    session("manager")
+    created = client.post("/api/product", json=product_payload(cat.id, sku="TRAIL-1")).json()
+    edited = client.put(
+        f"/api/product/{created['id']}", json=product_payload(cat.id, sku="TRAIL-1", price="999")
+    )
+    assert edited.status_code == 200, edited.text
+    session("cashier")
+    sale = client.post(
+        "/api/sales",
+        json={
+            "lines": [{"product_id": item.id, "quantity": 1}],
+            "payments": [{"method": "cash", "amount": str(_total(("100.00", 1)))}],
+        },
+    )
+    assert sale.status_code == 201, sale.text
+    session("staff")
+    adjusted = client.post(
+        "/api/stock/adjustments",
+        json={
+            "product_id": item.id,
+            "location_id": store.id,
+            "quantity_change": -1,
+            "reason": "Damaged",
+        },
+    )
+    assert adjusted.status_code == 201, adjusted.text
+    assert client.get("/api/auth/users").status_code == 403
+    session("admin")
+
+    trail = [
+        (entry["username"], entry["action"])
+        for entry in reversed(entries(client, page_size=100))
+        if entry["username"] in names.values()
+    ]
+    expected = [
+        (names["manager"], "login_failed"),
+        (names["manager"], "login"),
+        (names["manager"], "product_created"),
+        (names["manager"], "product_price_updated"),
+        (names["cashier"], "login"),
+        (names["cashier"], "sale_recorded"),
+        (names["staff"], "login"),
+        (names["staff"], "stock_updated"),
+        (names["staff"], "unauthorized_access_attempt"),
+        (names["admin"], "login"),
+    ]
+    actions = [pair for pair in trail if pair[1] != "logout"]
+    for pair in expected:
+        assert pair in actions, f"{pair} missing from {actions}"
+    positions = [actions.index(pair) for pair in expected]
+    assert positions == sorted(positions)
+    stamps = [entry["occurred_at"] for entry in entries(client, page_size=100)]
+    assert stamps == sorted(stamps, reverse=True)
