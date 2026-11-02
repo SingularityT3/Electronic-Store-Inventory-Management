@@ -30,7 +30,14 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 Check `https://<SITE_ADDRESS>/api/health` returns `{"status": "ok"}`.
 
-To create the first accounts, see the user-management documentation once it exists. The sample data
+Create the first Admin account (the password is asked for twice and never shown):
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm backend \
+  python -m scripts.create_admin owner "Store Owner" --email owner@example.com
+```
+
+Sign in as that Admin and add locations and the other users from the web app. The sample data
 script (`python -m scripts.seed`) is for development only; do not run it in production.
 
 ### Update
