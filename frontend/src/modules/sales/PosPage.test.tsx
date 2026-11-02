@@ -122,3 +122,37 @@ test('Alt shortcuts focus search and complete a sale', async () => {
   expect(await screen.findByRole('heading', { name: 'Sale recorded' })).toBeInTheDocument();
   expect(calls.some(([url]) => url === '/api/sales')).toBe(true);
 });
+
+test('serial-tracked items are sold by serial number', async () => {
+  const calls = mockApi();
+  const serialProduct = { ...product, tracking_mode: 'serial' as const };
+  const fetchMock = vi.mocked(fetch);
+  const original = fetchMock.getMockImplementation();
+  fetchMock.mockImplementation((url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).startsWith('/api/product?')) {
+      calls.push([String(url), init]);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ items: [serialProduct], total: 1, page: 1, page_size: 20 }),
+      } as Response);
+    }
+    return original!(url as string, init);
+  });
+  const user = userEvent.setup();
+  renderPage();
+
+  const search = await screen.findByRole('searchbox', { name: 'Find a product' });
+  await user.type(search, 'PHONE-1');
+  await user.keyboard('{Enter}');
+  const serials = await screen.findByLabelText('Serial numbers');
+  await user.type(serials, 'SN-1{Enter}SN-2');
+  expect(screen.getByLabelText('Quantity')).toHaveValue(2);
+  await user.click(screen.getByRole('button', { name: 'Complete sale' }));
+
+  const sale = calls.find(([url, init]) => url === '/api/sales' && init?.method === 'POST');
+  expect(JSON.parse(String(sale?.[1]?.body)).lines[0]).toMatchObject({
+    quantity: 2,
+    serial_numbers: ['SN-1', 'SN-2'],
+  });
+});

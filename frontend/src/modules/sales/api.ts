@@ -11,6 +11,8 @@ export interface Availability {
   location_name: string;
   available_quantity: number;
   unit_price?: string;
+  /** Set by the POS from the product search; serial items need a serial per unit. */
+  tracking_mode?: 'untracked' | 'batch' | 'serial';
 }
 
 export interface Sale {
