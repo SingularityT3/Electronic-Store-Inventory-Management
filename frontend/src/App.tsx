@@ -28,7 +28,12 @@ import {
   StockValuationPage,
   SupplierPerformanceReportPage,
 } from './modules/reporting';
-import { LocationsPage, StockLevelsPage, StockTransferPage } from './modules/stock';
+import {
+  BatchRecallPage,
+  LocationsPage,
+  StockLevelsPage,
+  StockTransferPage,
+} from './modules/stock';
 import { NotificationsPage } from './modules/notifications';
 import {
   POReceivingPage,
@@ -165,6 +170,8 @@ export default function App() {
             ) : item.path === '/stock' || item.path === '/stock/adjust' ? (
               // Adjustments start from a stock record (UC-08), so both items open stock levels.
               <StockLevelsPage />
+            ) : item.path === '/stock/batch-recall' ? (
+              <BatchRecallPage />
             ) : item.path === '/locations' ? (
               <LocationsPage />
             ) : item.path === '/variants' ? (
