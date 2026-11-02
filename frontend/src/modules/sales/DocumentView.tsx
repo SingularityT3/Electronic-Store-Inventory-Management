@@ -91,6 +91,12 @@ export default function DocumentView({
               <span>Cashier: {document.cashier_name ?? document.processor_name}</span>
             )}
             {document.customer_name && <span>Customer: {document.customer_name}</span>}
+            {document.kind === 'credit_note' && document.invoice_label && (
+              <span>Original invoice: {document.invoice_label}</span>
+            )}
+            {document.approver_username && (
+              <span>Late return approved by: {document.approver_username}</span>
+            )}
             {returnStatus !== 'none' && (
               <strong className="badge warning">
                 {returnStatus === 'partially_returned' ? 'Partially Returned' : 'Fully Returned'}

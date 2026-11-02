@@ -154,6 +154,7 @@ export interface DocumentContent {
   cashier_id?: number;
   cashier_name?: string;
   processor_name?: string;
+  approver_username?: string | null;
   customer_name?: string | null;
   gst_rate?: string;
   subtotal?: string;

@@ -74,6 +74,8 @@ test('renders credit notes with the refund total and return status', () => {
   const creditNote: DocumentContent = {
     kind: 'credit_note',
     credit_note_number: 'CN-0003',
+    invoice_label: 'INV-0042',
+    approver_username: 'manager_priya',
     created_at: '2026-10-30T10:00:00Z',
     store_name: 'ESIMS Electronics',
     location_name: 'Main Store',
@@ -88,6 +90,8 @@ test('renders credit notes with the refund total and return status', () => {
     />,
   );
   expect(screen.getByText('CN-0003')).toBeInTheDocument();
+  expect(screen.getByText('Original invoice: INV-0042')).toBeInTheDocument();
+  expect(screen.getByText('Late return approved by: manager_priya')).toBeInTheDocument();
   expect(screen.getByText('Partially Returned')).toBeInTheDocument();
   expect(screen.getByText('Refund total')).toBeInTheDocument();
 });
