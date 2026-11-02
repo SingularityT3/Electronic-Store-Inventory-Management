@@ -91,6 +91,24 @@ export default function POReceivingPage() {
     }));
   }
 
+  // A complete delivery: accept every outstanding unit in one click (usability finding U-04).
+  function acceptAllOutstanding() {
+    if (!selected) return;
+    setDrafts((current) =>
+      Object.fromEntries(
+        selected.lines.map((line) => [
+          line.id,
+          {
+            ...(current[line.id] ?? emptyDraft(line)),
+            quantity_accepted: line.quantity_outstanding,
+            quantity_damaged: 0,
+            quantity_short: 0,
+          },
+        ]),
+      ),
+    );
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selected) return;
@@ -302,6 +320,9 @@ export default function POReceivingPage() {
               rowKey={(line) => line.id}
               emptyMessage="This purchase order has no lines."
             />
+            <button type="button" onClick={acceptAllOutstanding} disabled={saving}>
+              Accept all outstanding
+            </button>{' '}
             <button type="submit" disabled={saving}>
               {saving ? 'Recording receipt…' : 'Record receipt'}
             </button>
