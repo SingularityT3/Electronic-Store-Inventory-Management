@@ -7,6 +7,16 @@ stores. Requirements are in `Documents/`; the module layout is in
 Stack: FastAPI (Python 3.12), React + TypeScript (Vite), PostgreSQL 16. Everything runs in Docker,
 so the only prerequisite is Docker with the Compose plugin. Nothing is installed locally.
 
+## Documentation
+
+- **Using ESIMS**: [getting started](docs/guides/getting-started.md), then the guide for your role:
+  [Cashier](docs/guides/cashier.md), [Staff](docs/guides/staff.md),
+  [Manager](docs/guides/manager.md), [Admin](docs/guides/admin.md).
+- **Running ESIMS** (install, configure, first accounts, backups, monitoring):
+  [admin and setup guide](docs/guides/admin-setup.md).
+- **Handover** (what is delivered, where everything is, decisions, known limitations):
+  [docs/handover.md](docs/handover.md).
+
 ## Run
 
 ```bash
@@ -59,7 +69,8 @@ Performance and load test (10,000 SKUs, concurrent sales, large exports):
 
 ## Deploy
 
-Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md).
+Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md);
+first accounts and day-to-day operation: [`docs/guides/admin-setup.md`](docs/guides/admin-setup.md).
 CI runs lint, tests and builds on every pull request.
 
 ## Layout

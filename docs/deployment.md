@@ -37,7 +37,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm backend 
   python -m scripts.create_admin owner "Store Owner" --email owner@example.com
 ```
 
-Sign in as that Admin and add locations and the other users from the web app. The sample data
+Sign in as that Admin and add locations and the other users from the web app; see the
+[admin and setup guide](guides/admin-setup.md). The sample data
 script (`python -m scripts.seed`) is for development only; do not run it in production.
 
 ### Update

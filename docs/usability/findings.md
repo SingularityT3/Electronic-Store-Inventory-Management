@@ -57,7 +57,7 @@ Severity uses the Nielsen scale: **0** not a problem, **1** cosmetic, **2** mino
   opportunities for a new staff member to miss a line.
 - **Recommended fix:** Add a tested receive-all action after confirming the product rules for
   damaged, short, batch and serial-tracked lines.
-- **Status:** Open.
+- **Status:** Fixed: **Accept all outstanding** fills every line with its outstanding quantity (pull request #89).
 
 ## U-05 — Stock adjustment form does not retain the selected context after success
 
@@ -69,7 +69,7 @@ Severity uses the Nielsen scale: **0** not a problem, **1** cosmetic, **2** mino
   the selected location/category/product filters.
 - **Why it matters:** Repeated corrections may require re-finding the same item.
 - **Recommended fix:** Preserve the selected filters when refreshing after a successful adjustment.
-- **Status:** Open.
+- **Status:** Fixed: the filters are kept after an adjustment (verified in a browser walkthrough, November 2026).
 
 ## U-06 — Browser and visual contrast verification is still outstanding
 
