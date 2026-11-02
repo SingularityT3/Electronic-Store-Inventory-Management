@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePopover } from '../../shell/usePopover';
 import { useAuth } from '../auth';
 import { useNotifications } from './useNotifications';
 import { can } from '../auth';
 import { formatRelativeTime } from '../../utils/date';
+import { createPurchaseOrderHref, notificationHref } from './links';
 
 interface NotificationPanelProps {
   bellRef: React.RefObject<HTMLButtonElement>;
@@ -11,6 +13,7 @@ interface NotificationPanelProps {
 
 export function NotificationPanel({ bellRef }: NotificationPanelProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { open, setOpen, close } = usePopover<HTMLDivElement>();
   const { notifications, unreadCount, loading, error, markRead, markAllRead, dismiss } =
     useNotifications();
@@ -88,45 +91,26 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
     }
   };
 
-  const handleLinkClick = async (notification: (typeof notifications)[0], e: React.MouseEvent) => {
-    // Mark as read when clicking a link
+  const handleLinkClick = async (
+    notification: (typeof notifications)[0],
+    href: string,
+    e: React.MouseEvent,
+  ) => {
+    // Mark as read, then go there in the app (a plain link would reload the page).
+    e.preventDefault();
     if (!notification.is_read) {
-      e.preventDefault();
       try {
         await markRead(notification.id);
       } catch {
-        // Continue with navigation even if mark read fails
+        // Navigate even if marking it read fails.
       }
     }
+    close();
+    navigate(href);
   };
 
-  const getNotificationLink = (notification: (typeof notifications)[0]): string | null => {
-    if (!notification.links) return null;
-
-    if (notification.type === 'po_status' && notification.links.purchase_order_id) {
-      return `/purchase-orders/${notification.links.purchase_order_id}`;
-    }
-
-    if (
-      (notification.type === 'low_stock' || notification.type === 'out_of_stock') &&
-      notification.links.product_id
-    ) {
-      // For staff who can't access product management, link to stock levels or product search
-      if (!can(user, 'products.manage')) {
-        const locationId = notification.links.location_id;
-        if (locationId) {
-          return `/stock?product=${notification.links.product_id}&location=${locationId}`;
-        }
-        return `/products/search?q=${encodeURIComponent(notification.title.replace('Low stock: ', '').replace('Out of stock: ', '').split(' (')[0])}`;
-      }
-      const variantPart = notification.links.variant_id
-        ? `/variants/${notification.links.variant_id}`
-        : '';
-      return `/products/${notification.links.product_id}${variantPart}`;
-    }
-
-    return null;
-  };
+  const getNotificationLink = (notification: (typeof notifications)[0]): string | null =>
+    notificationHref(notification, can(user, 'products.manage'));
 
   if (!user) return null;
 
@@ -171,7 +155,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
             )}
           </header>
 
-          {loading && <div className="notification-loading">Loading notifications?</div>}
+          {loading && <div className="notification-loading">Loading notifications…</div>}
 
           {error && (
             <div className="notification-error" role="alert">
@@ -221,19 +205,24 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
                           <a
                             href={link}
                             className="notification-link"
-                            onClick={(e) => handleLinkClick(notification, e)}
+                            onClick={(e) => handleLinkClick(notification, link, e)}
                           >
                             {notification.type === 'po_status' ? 'View order' : 'View product'}
                           </a>
-                          {notification.type !== 'po_status' &&
-                            notification.links?.product_id &&
+                          {createPurchaseOrderHref(notification) &&
                             can(user, 'purchase_orders.manage') && (
                               <>
                                 {' | '}
                                 <a
-                                  href={`/purchase-orders/new?product=${notification.links.product_id}&location=${notification.links.location_id || ''}&variant=${notification.links.variant_id || ''}`}
+                                  href={createPurchaseOrderHref(notification) ?? undefined}
                                   className="notification-link"
-                                  onClick={(e) => handleLinkClick(notification, e)}
+                                  onClick={(e) =>
+                                    handleLinkClick(
+                                      notification,
+                                      createPurchaseOrderHref(notification) ?? '/purchase-orders',
+                                      e,
+                                    )
+                                  }
                                 >
                                   Create PO
                                 </a>

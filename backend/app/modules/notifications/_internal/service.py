@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.auth import stock_alert_notification_recipients
@@ -379,7 +379,11 @@ def list_user_notifications(
     elif not include_read:
         query = query.where(Notification.is_read.is_(True))
 
-    query = query.order_by(Notification.created_at.desc()).offset(offset).limit(limit)
+    query = (
+        query.order_by(Notification.created_at.desc(), Notification.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
 
     return [_notification_data(n) for n in db.scalars(query)]
 
@@ -388,15 +392,12 @@ def unread_count(db: Session, *, user_id: int) -> int:
     """Count unread active notifications for a user."""
     return (
         db.scalar(
-            select(select(Notification.id))
-            .where(
+            select(func.count(Notification.id)).where(
                 Notification.recipient_user_id == user_id,
                 Notification.dismissed_at.is_(None),
                 Notification.resolved_at.is_(None),
                 Notification.is_read.is_(False),
             )
-            .exists()
-            .select()
         )
         or 0
     )

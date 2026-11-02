@@ -102,6 +102,12 @@ def list_notifications(
                     "product_id": alert.product_id,
                     "variant_id": alert.variant_id,
                     "location_id": alert.location_id,
+                    # For the "Create PO" shortcut (FR2.3-ST-1): what to order and how much.
+                    "product_name": alert.product_name,
+                    "sku": alert.sku,
+                    "variant_sku": alert.variant_sku,
+                    "quantity": alert.quantity,
+                    "threshold": alert.threshold,
                 }
         elif nd.reference_type == "purchase_order" and nd.reference_id:
             links = {"purchase_order_id": nd.reference_id}
