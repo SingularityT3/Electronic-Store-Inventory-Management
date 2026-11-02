@@ -93,3 +93,44 @@ def test_refuses_duplicates_short_passwords_and_blanks(fresh_engine, fields, mes
     arguments = {"full_name": "Someone", "password": PASSWORD, **fields}
     with pytest.raises(CreateAdminError, match=message):
         create_admin(fresh_engine, **arguments)
+
+
+def test_set_password_replaces_the_password_ends_sessions_and_clears_lockout(fresh_engine):
+    from datetime import UTC, datetime, timedelta
+
+    from scripts.set_password import SetPasswordError, set_password
+
+    user_id = create_admin(fresh_engine, username="clerk", full_name="Clerk", password=PASSWORD)
+    with fresh_engine.begin() as conn:
+        conn.execute(
+            text("UPDATE users SET failed_login_count=5, locked_until=:until WHERE id=:id"),
+            {"until": datetime.now(UTC) + timedelta(minutes=15), "id": user_id},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO user_sessions (token_hash, user_id, expires_at) "
+                "VALUES ('x' || :id, :id, now() + interval '1 hour')"
+            ),
+            {"id": user_id},
+        )
+
+    set_password(fresh_engine, username="CLERK", password="a-new-password")
+
+    with fresh_engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT password_hash, failed_login_count, locked_until FROM users WHERE id=:id"),
+            {"id": user_id},
+        ).one()
+        sessions = conn.execute(
+            text("SELECT count(*) FROM user_sessions WHERE user_id=:id"), {"id": user_id}
+        ).scalar_one()
+        audited = conn.execute(
+            text("SELECT count(*) FROM audit_log WHERE action='password_set_by_operator'")
+        ).scalar_one()
+    assert verify_password(row.password_hash, "a-new-password")
+    assert not verify_password(row.password_hash, PASSWORD)
+    assert (row.failed_login_count, row.locked_until, sessions, audited) == (0, None, 0, 1)
+    with pytest.raises(SetPasswordError, match="No user"):
+        set_password(fresh_engine, username="nobody", password="a-new-password")
+    with pytest.raises(SetPasswordError, match="at least 8"):
+        set_password(fresh_engine, username="clerk", password="short")

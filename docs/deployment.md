@@ -61,7 +61,7 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `COOKIE_SECURE`     | Keep `true`: session cookies are sent over HTTPS only.                                     |
 | `CORS_ORIGINS`      | Leave empty; the SPA and API share one origin.                                             |
 | `LOCKOUT_*`, `SESSION_*` | Login lockout and session timeouts (SRS A-12). Defaults: 5 failures lock for 15 minutes; sessions end after 30 idle minutes or 12 hours. |
-| `SMTP_*`            | Mail server for password reset links. If `SMTP_HOST` is empty, reset emails are not sent and an Admin must reset passwords (#7). |
+| `SMTP_*`            | Mail server for invite and password reset links. If `SMTP_HOST` is empty, no email is sent: set passwords on the server with `python -m scripts.set_password <username>` (see the admin guide). |
 | `PRODUCT_IMAGE_MAX_BYTES` | Maximum upload size in bytes; defaults to 5 MiB, and must be at least 2 MiB for the required product-image test. |
 | `GST_RATE` | Percentage applied to each discounted sale line; defaults to `18` (18% GST). |
 | `STORE_NAME` | Store name printed on invoice and credit note snapshots; defaults to `ESIMS Electronics`. |

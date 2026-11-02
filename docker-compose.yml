@@ -30,6 +30,10 @@ services:
       SMTP_PORT: 1025
       SMTP_STARTTLS: "false"
       RETENTION_YEARS: ${RETENTION_YEARS:-8}
+      GST_RATE: ${GST_RATE:-18}
+      RETURN_WINDOW_DAYS: ${RETURN_WINDOW_DAYS:-30}
+      STORE_NAME: ${STORE_NAME:-ESIMS Electronics}
+      STORE_GSTIN: ${STORE_GSTIN:-}
       RETENTION_ARCHIVE_PATH: /retention-archive
     ports:
       - "${BACKEND_PORT:-8000}:8000"
