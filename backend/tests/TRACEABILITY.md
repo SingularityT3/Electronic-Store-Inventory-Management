@@ -12,7 +12,7 @@ Status:
 
 Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend/src`. Tests written for this table are named after their ID (`test_fr1_1_it_3_...` in `test_plan_cases.py`).
 
-Totals: 226 cases, 153 automated, 20 partial, 1 manual, 52 pending.
+Totals: 226 cases, 161 automated, 20 partial, 1 manual, 44 pending.
 
 
 ## 3.1 Product Management
@@ -196,7 +196,7 @@ Totals: 226 cases, 153 automated, 20 partial, 1 manual, 52 pending.
 
 ## 3.6 Reporting and Analytics
 
-40 cases: 25 automated, 5 partial, 10 pending.
+40 cases: 33 automated, 5 partial, 2 pending.
 
 | ID | Status | Tests | Note |
 |---|---|---|---|
@@ -224,18 +224,18 @@ Totals: 226 cases, 153 automated, 20 partial, 1 manual, 52 pending.
 | FR6.3-IT-3 | Automated | `test_reporting_stock.py::test_reorder_report_filters_thresholds_and_uses_reorder_to` |  |
 | FR6.3-ST-1 | Automated | `fe:modules/reporting/LowStockReportPage.test.tsx::low-stock report filters locations and links a prefilled PO` ; `fe:modules/purchasing/PurchaseOrdersPage.test.tsx::reorder report links prefill a draft purchase order` |  |
 | FR6.3-ST-2 | Automated | `test_reporting_stock.py::test_admin_can_access_reorder_report` ; `test_reporting_stock.py::test_staff_cannot_access_stock_reports` ; `test_reporting_stock.py::test_cashier_cannot_access_stock_reports` ; `test_rbac.py::test_api_enforces_the_matrix_for_every_role` |  |
-| FR6.4-UT-1 | Pending |  | Supplier performance report is #33 |
-| FR6.4-UT-2 | Pending |  | Supplier performance report is #33 |
-| FR6.4-UT-3 | Pending |  | Supplier performance report is #33 |
-| FR6.4-IT-1 | Pending |  | Supplier performance report is #33 |
-| FR6.4-IT-2 | Pending |  | Supplier performance report is #33 |
-| FR6.4-IT-3 | Pending |  | Supplier performance report is #33 |
-| FR6.4-ST-1 | Pending |  | Supplier performance report is #33 |
-| FR6.4-ST-2 | Pending |  | Supplier performance report is #33 |
+| FR6.4-UT-1 | Automated | `test_supplier_performance.py::test_supplier_performance_calculates_four_of_five_on_time_once_per_po` | Counts one delivery per PO even when it has multiple receipts |
+| FR6.4-UT-2 | Automated | `test_supplier_performance.py::test_supplier_performance_counts_orders_and_values_once_and_filters_by_period` | Order value is calculated once per PO despite multiple receipts |
+| FR6.4-UT-3 | Automated | `test_supplier_performance.py::test_supplier_performance_price_trends_match_supplier_and_product_history` |  |
+| FR6.4-IT-1 | Automated | `test_supplier_performance.py::test_supplier_performance_uses_only_accepted_receipts_and_reflects_receipt_updates` | Damaged quantities do not count as fulfilled stock |
+| FR6.4-IT-2 | Automated | `test_supplier_performance.py::test_supplier_performance_price_trends_match_supplier_and_product_history` | Price points remain attributed to the supplier/product and history is unchanged |
+| FR6.4-IT-3 | Automated | `test_supplier_performance.py::test_supplier_performance_uses_only_accepted_receipts_and_reflects_receipt_updates` ; `test_supplier_performance.py::test_supplier_performance_counts_orders_and_values_once_and_filters_by_period` | Tests receipt updates and selected-period filters |
+| FR6.4-ST-1 | Automated | `fe:modules/reporting/SupplierPerformanceReportPage.test.tsx::renders supplier metrics and recorded product price changes side by side` ; `fe:modules/reporting/SupplierPerformanceReportPage.test.tsx::date and supplier filters request a side-by-side comparison for the selected suppliers` ; `fe:modules/reporting/SupplierPerformanceReportPage.test.tsx::shows loading, error and empty states` |  |
+| FR6.4-ST-2 | Automated | `test_supplier_performance.py::test_supplier_performance_date_validation_and_manager_admin_access` ; `fe:shell/shell.test.tsx::staff and cashiers cannot see or directly open supplier performance reports` | Backend requires reports.view; the UI also hides and guards the route |
 | FR6.5-UT-1 | Automated | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` ; `test_reporting_export.py::test_fr6_5_csv_matches_the_on_screen_valuation` |  |
 | FR6.5-UT-2 | Automated | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` |  |
 | FR6.5-UT-3 | Automated | `test_reporting_export.py::test_fr6_5_ut_3_commas_and_quotes_stay_in_one_cell` |  |
-| FR6.5-IT-1 | Partial | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` | Covers the valuation and reorder reports; sales trend (#31) and supplier performance (#33) are not in `main` yet |
+| FR6.5-IT-1 | Partial | `test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` | Covers existing exports; sales trend (#31) and supplier performance export (#34) are out of scope here |
 | FR6.5-IT-2 | Automated | `test_reporting_export.py::test_fr6_5_it_2_pdf_header_has_title_time_and_filter` |  |
 | FR6.5-IT-3 | Automated | `test_reporting_export.py::test_fr6_5_it_3_five_thousand_rows_export_without_truncation` |  |
 | FR6.5-ST-1 | Automated | `test_reporting_export.py::test_fr6_5_st_1_export_is_denied_where_the_report_is_denied` |  |

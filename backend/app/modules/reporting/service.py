@@ -1,14 +1,19 @@
 """Public service interface of the `reporting` module."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.modules.product import product_catalog_items
-from app.modules.purchasing import supplier_catalog_costs
+from app.modules.product import product_catalog_items, product_stock_items
+from app.modules.purchasing import (
+    SupplierReportOrder,
+    SupplierReportPrice,
+    supplier_catalog_costs,
+    supplier_report_sources,
+)
 from app.modules.reporting._internal.export import ReportTable
 from app.modules.sales import SalesTotalsByProduct, sales_totals_by_product
 from app.modules.stock import StockPosition, stock_positions
@@ -53,12 +58,159 @@ class SalesTrendReport:
     products_with_zero_sales: int
 
 
+@dataclass(frozen=True)
+class SupplierPricePoint:
+    recorded_at: datetime
+    unit_price: Decimal
+
+
+@dataclass(frozen=True)
+class SupplierProductPriceTrend:
+    product_id: int
+    product_name: str
+    sku: str
+    variant_id: int | None
+    price_points: list[SupplierPricePoint]
+    first_price: Decimal
+    latest_price: Decimal
+    variance: Decimal | None
+    variance_percent: Decimal | None
+
+
+@dataclass(frozen=True)
+class SupplierPerformance:
+    supplier_id: int
+    supplier_name: str
+    purchase_order_count: int
+    total_order_value: Decimal
+    on_time_delivery_rate: Decimal | None
+    on_time_delivery_count: int
+    eligible_delivery_count: int
+    fulfilment_accuracy: Decimal | None
+    quantity_ordered: int
+    quantity_accepted: int
+    price_trends: list[SupplierProductPriceTrend]
+
+
 class ReportingService(Protocol):
     """Operations the `reporting` module offers to other modules.
 
     Methods are added as features land; callers depend on this interface,
     never on `_internal`.
     """
+
+
+def supplier_performance_rows(
+    db: Session,
+    *,
+    start: datetime,
+    end: datetime,
+    supplier_ids: list[int] | None = None,
+) -> list[SupplierPerformance]:
+    """Aggregate one PO cohort per supplier and selected-period price history."""
+    suppliers, orders, prices = supplier_report_sources(
+        db, start=start, end=end, supplier_ids=supplier_ids
+    )
+    orders_by_supplier: dict[int, list[SupplierReportOrder]] = {
+        supplier.id: [] for supplier in suppliers
+    }
+    for order in orders:
+        orders_by_supplier[order.supplier_id].append(order)
+
+    prices_by_supplier_product: dict[tuple[int, int, int | None], list[SupplierReportPrice]] = {}
+    product_ids = {price.product_id for price in prices}
+    for price in prices:
+        key = (price.supplier_id, price.product_id, price.variant_id)
+        prices_by_supplier_product.setdefault(key, []).append(price)
+    item_names = {
+        (item.product_id, item.variant_id): (item.product_name, item.variant_sku or item.sku)
+        for item in product_stock_items(db, product_ids)
+    }
+
+    reports = []
+    for supplier in suppliers:
+        supplier_orders = orders_by_supplier[supplier.id]
+        eligible_deliveries = 0
+        on_time_deliveries = 0
+        for order in supplier_orders:
+            if order.expected_delivery_date is None or order.first_receipt_at is None:
+                continue
+            actual_date = order.first_receipt_at
+            if actual_date.tzinfo is not None:
+                actual_date = actual_date.astimezone(UTC)
+            eligible_deliveries += 1
+            on_time_deliveries += actual_date.date() <= order.expected_delivery_date
+
+        quantity_ordered = sum(order.quantity_ordered for order in supplier_orders)
+        quantity_accepted = sum(order.quantity_accepted for order in supplier_orders)
+        on_time_rate = (
+            (Decimal(on_time_deliveries) * 100 / eligible_deliveries).quantize(Decimal("0.01"))
+            if eligible_deliveries
+            else None
+        )
+        fulfilment_accuracy = (
+            (Decimal(quantity_accepted) * 100 / quantity_ordered).quantize(Decimal("0.01"))
+            if quantity_ordered
+            else None
+        )
+
+        trends = []
+        supplier_keys = sorted(
+            (key for key in prices_by_supplier_product if key[0] == supplier.id),
+            key=lambda key: (
+                item_names.get((key[1], key[2]), (f"Product {key[1]}", ""))[0].casefold(),
+                key[2] or 0,
+            ),
+        )
+        for key in supplier_keys:
+            entries = prices_by_supplier_product[key]
+            first_price = entries[0].unit_price
+            latest_price = entries[-1].unit_price
+            variance = latest_price - first_price if len(entries) > 1 else None
+            variance_percent = (
+                (variance * 100 / first_price).quantize(Decimal("0.01"))
+                if variance is not None and first_price != 0
+                else None
+            )
+            product_name, sku = item_names.get(key[1:], (f"Product {key[1]}", ""))
+            trends.append(
+                SupplierProductPriceTrend(
+                    product_id=key[1],
+                    product_name=product_name,
+                    sku=sku,
+                    variant_id=key[2],
+                    price_points=[
+                        SupplierPricePoint(
+                            recorded_at=entry.recorded_at,
+                            unit_price=entry.unit_price,
+                        )
+                        for entry in entries
+                    ],
+                    first_price=first_price,
+                    latest_price=latest_price,
+                    variance=variance,
+                    variance_percent=variance_percent,
+                )
+            )
+
+        reports.append(
+            SupplierPerformance(
+                supplier_id=supplier.id,
+                supplier_name=supplier.name,
+                purchase_order_count=len(supplier_orders),
+                total_order_value=sum(
+                    (order.order_value for order in supplier_orders), Decimal("0")
+                ),
+                on_time_delivery_rate=on_time_rate,
+                on_time_delivery_count=on_time_deliveries,
+                eligible_delivery_count=eligible_deliveries,
+                fulfilment_accuracy=fulfilment_accuracy,
+                quantity_ordered=quantity_ordered,
+                quantity_accepted=quantity_accepted,
+                price_trends=trends,
+            )
+        )
+    return reports
 
 
 def valuation_rows(

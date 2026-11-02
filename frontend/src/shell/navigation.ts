@@ -135,6 +135,13 @@ export const NAV_ITEMS: NavItem[] = [
     deniedLabel: 'reports',
   },
   {
+    path: '/reports/supplier-performance',
+    label: 'Supplier performance',
+    group: 'Reporting',
+    permission: 'reports.view',
+    deniedLabel: 'supplier performance reports',
+  },
+  {
     path: '/users',
     label: 'User management',
     group: 'Administration',
