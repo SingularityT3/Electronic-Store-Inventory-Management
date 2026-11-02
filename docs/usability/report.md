@@ -79,8 +79,7 @@ No sessions have been run yet. The criterion “most test users complete each ke
 ## Acceptance criteria status
 
 1. Most test users complete each key task unaided: **OPEN — user sessions have not been run.**
-2. Report of findings and fixes committed: **Ready as uncommitted work in this change; commit and
-   review it with the fixes.**
+2. Report of findings and fixes committed: **Done** (#38; U-04 and U-05 fixed since).
 
 ## Limitations
 
@@ -93,6 +92,6 @@ or Edge, real barcode hardware, browser print dialogs, or screen-reader output.
 1. Run the protocol with 3–5 cashier and 3–5 staff participants.
 2. Fill the CSV with one honest row per participant-task and run the summary script.
 3. Complete the Chrome, Firefox and Edge checklist.
-4. Create GitHub issues for the open findings U-04–U-06.
+4. Create a GitHub issue for the open finding U-06 (U-04 and U-05 are fixed).
 5. Update this report with the generated tables and update `backend/tests/TRACEABILITY.md` if
    NFR-9/NFR-10 rows are added to the test plan.
