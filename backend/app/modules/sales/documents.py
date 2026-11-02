@@ -68,6 +68,8 @@ def document_pdf(document: Document) -> bytes:
             or data.get("processor_username"),
         ),
         ("Customer", data.get("customer_name")),
+        ("Original invoice", data.get("invoice_label") if document.kind == "credit_note" else None),
+        ("Late return approved by", data.get("approver_username")),
     ):
         if value:
             pdf.cell(0, 5, _latin1(f"{label}: {value}"), new_x="LMARGIN", new_y="NEXT")

@@ -21,6 +21,7 @@ from app.modules.auth import (
     require,
     user_full_names,
 )
+from app.modules.product import product_stock_item
 from app.modules.sales._internal.models import (
     Invoice,
     Payment,
@@ -51,7 +52,9 @@ from app.modules.sales.service import (
     record_sale,
 )
 from app.modules.stock import (
+    BatchRecallData,
     batch_stock_positions,
+    find_batch_ids,
     location_details_many,
     location_exists,
     serial_number_labels,
@@ -265,11 +268,13 @@ class InvoiceDocumentOut(BaseModel):
 
 class BatchLocationOut(BaseModel):
     location_id: int
+    location_name: str | None = None
     quantity_in_stock: int
 
 
 class BatchReceiptOut(BaseModel):
     location_id: int
+    location_name: str | None = None
     reference_type: str
     reference_id: int
     quantity: int
@@ -277,6 +282,7 @@ class BatchReceiptOut(BaseModel):
 
 class BatchSoldOut(BaseModel):
     invoice_number: int
+    invoice_label: str = ""
     quantity_sold: int
     quantity_returned: int
     quantity_still_sold: int
@@ -286,7 +292,10 @@ class BatchRecallOut(BaseModel):
     batch_id: int
     batch_number: str
     product_id: int
+    product_name: str | None = None
+    sku: str | None = None
     variant_id: int | None
+    variant_sku: str | None = None
     quantity_received: int
     quantity_in_stock: int
     locations: list[BatchLocationOut]
@@ -441,13 +450,8 @@ def create_sale(
         raise
 
 
-@router.get("/batches/{batch_id}/recall", response_model=BatchRecallOut)
-def batch_recall(
-    batch_id: int,
-    db: Annotated[Session, Depends(get_session)],
-    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
-    location_id: Annotated[int | None, Query(ge=1)] = None,
-) -> BatchRecallOut:
+def _batch_recall_scope(db: Session, user: CurrentUser, location_id: int | None) -> int | None:
+    """The location a recall may show: any for Admin and Manager, their own for Staff (A-9)."""
     if not user.sees_all_locations:
         if user.location_id is None:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "A location assignment is required.")
@@ -456,10 +460,10 @@ def batch_recall(
         location_id = user.location_id
     if location_id is not None and not location_exists(db, location_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Location not found.")
-    batch_data = batch_stock_positions(db, batch_id=batch_id, location_id=location_id)
-    if batch_data is None or (location_id is not None and not batch_data.locations):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found.")
+    return location_id
 
+
+def _batch_recall_out(db: Session, batch_data: BatchRecallData) -> BatchRecallOut:
     stock_ids = [position.batch_stock_id for position in batch_data.locations]
     sold_rows = []
     if stock_ids:
@@ -480,14 +484,24 @@ def batch_recall(
             sold_rows.append(
                 BatchSoldOut(
                     invoice_number=invoice_number,
+                    invoice_label=invoice_label(invoice_number),
                     quantity_sold=allocation.quantity,
                     quantity_returned=quantity_returned,
                     quantity_still_sold=allocation.quantity - quantity_returned,
                 )
             )
+    names = location_details_many(
+        db,
+        sorted(
+            {position.location_id for position in batch_data.locations}
+            | {receipt.location_id for receipt in batch_data.receipts}
+        ),
+    )
+    item = product_stock_item(db, batch_data.product_id, batch_data.variant_id)
     locations = [
         BatchLocationOut(
             location_id=position.location_id,
+            location_name=names.get(position.location_id, (None, None))[0],
             quantity_in_stock=position.quantity_on_hand,
         )
         for position in batch_data.locations
@@ -496,13 +510,17 @@ def batch_recall(
         batch_id=batch_data.batch_id,
         batch_number=batch_data.batch_number,
         product_id=batch_data.product_id,
+        product_name=item.product_name if item else None,
+        sku=item.sku if item else None,
         variant_id=batch_data.variant_id,
+        variant_sku=item.variant_sku if item else None,
         quantity_received=batch_data.quantity_received,
-        quantity_in_stock=sum(item.quantity_in_stock for item in locations),
+        quantity_in_stock=sum(row.quantity_in_stock for row in locations),
         locations=locations,
         receipts=[
             BatchReceiptOut(
                 location_id=receipt.location_id,
+                location_name=names.get(receipt.location_id, (None, None))[0],
                 reference_type=receipt.reference_type,
                 reference_id=receipt.reference_id,
                 quantity=receipt.quantity,
@@ -511,6 +529,40 @@ def batch_recall(
         ],
         sold=sold_rows,
     )
+
+
+@router.get("/batches/recall", response_model=list[BatchRecallOut])
+def batch_recall_by_number(
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
+    batch_number: Annotated[str, Query(min_length=1, max_length=100)],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[BatchRecallOut]:
+    """Recall lookup by batch number (FR2.5-IT-3): every batch with that number, any product."""
+    location_id = _batch_recall_scope(db, user, location_id)
+    results = []
+    for batch_id in find_batch_ids(db, batch_number):
+        batch_data = batch_stock_positions(db, batch_id=batch_id, location_id=location_id)
+        if batch_data is None or (location_id is not None and not batch_data.locations):
+            continue
+        results.append(_batch_recall_out(db, batch_data))
+    if not results:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found.")
+    return results
+
+
+@router.get("/batches/{batch_id}/recall", response_model=BatchRecallOut)
+def batch_recall(
+    batch_id: int,
+    db: Annotated[Session, Depends(get_session)],
+    user: Annotated[CurrentUser, Depends(require(Permission.STOCK_VIEW))],
+    location_id: Annotated[int | None, Query(ge=1)] = None,
+) -> BatchRecallOut:
+    location_id = _batch_recall_scope(db, user, location_id)
+    batch_data = batch_stock_positions(db, batch_id=batch_id, location_id=location_id)
+    if batch_data is None or (location_id is not None and not batch_data.locations):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Batch not found.")
+    return _batch_recall_out(db, batch_data)
 
 
 @router.get("/by-invoice", include_in_schema=False)

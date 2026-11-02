@@ -144,6 +144,7 @@ def test_batch_receipt_sale_and_recall_reports_sold_invoice_and_available_units(
     assert recall.json()["receipts"] == [
         {
             "location_id": location.id,
+            "location_name": location.name,
             "reference_type": "po_receipt_line",
             "reference_id": 1,
             "quantity": 100,
@@ -152,6 +153,7 @@ def test_batch_receipt_sale_and_recall_reports_sold_invoice_and_available_units(
     assert recall.json()["sold"] == [
         {
             "invoice_number": invoice_number,
+            "invoice_label": sale.json()["invoice"]["invoice_label"],
             "quantity_sold": 40,
             "quantity_returned": 0,
             "quantity_still_sold": 40,
@@ -456,6 +458,7 @@ def test_batch_return_restores_stock_and_keeps_invoice_allocation(client, make_u
     assert recall.json()["sold"] == [
         {
             "invoice_number": sale_data["invoice"]["invoice_number"],
+            "invoice_label": sale_data["invoice"]["invoice_label"],
             "quantity_sold": 2,
             "quantity_returned": 1,
             "quantity_still_sold": 1,
@@ -499,7 +502,9 @@ def test_batch_recall_is_limited_to_staff_location(client, make_user, db):
     recall = client.get(f"/api/sales/batches/{batch_id}/recall")
     assert recall.status_code == 200, recall.text
     assert recall.json()["quantity_in_stock"] == 2
-    assert recall.json()["locations"] == [{"location_id": location.id, "quantity_in_stock": 2}]
+    assert recall.json()["locations"] == [
+        {"location_id": location.id, "location_name": location.name, "quantity_in_stock": 2}
+    ]
     assert (
         client.get(f"/api/sales/batches/{batch_id}/recall?location_id={other.id}").status_code
         == 403

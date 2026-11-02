@@ -1,4 +1,5 @@
 import { api } from '../../api';
+import type { NotificationLinks } from './links';
 
 export interface Notification {
   id: number;
@@ -11,12 +12,7 @@ export interface Notification {
   location_name: string | null;
   reference_type: string | null;
   reference_id: number | null;
-  links: {
-    product_id?: number;
-    variant_id?: number | null;
-    location_id?: number;
-    purchase_order_id?: number;
-  } | null;
+  links: NotificationLinks | null;
 }
 
 export interface UnreadCount {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { DataTable, EmptyState } from '../../shell/components';
 import { useAuth, can } from '../auth';
+import { createPurchaseOrderHref, notificationHref, type NotificationLinks } from './links';
 
 interface Notification {
   id: number;
@@ -15,17 +16,7 @@ interface Notification {
   location_name: string | null;
   reference_type: string | null;
   reference_id: number | null;
-  links: {
-    product_id?: number;
-    variant_id?: number | null;
-    location_id?: number;
-    purchase_order_id?: number;
-  } | null;
-}
-
-interface NotificationsResponse {
-  items: Notification[];
-  total: number;
+  links: NotificationLinks | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -37,7 +28,8 @@ const TYPE_LABELS: Record<string, string> = {
 export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [total, setTotal] = useState(0);
+  // The API returns a plain page of rows; asking for one extra row tells us if there is more.
+  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -62,16 +54,15 @@ export default function NotificationsPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await api<NotificationsResponse>(
+      const rows = await api<Notification[]>(
         buildUrl('/notifications', {
-          limit: pageSize,
+          limit: pageSize + 1,
           offset: (page - 1) * pageSize,
           unread_only: filter === 'unread',
-          include_read: filter === 'all',
         }),
       );
-      setNotifications(response.items);
-      setTotal(response.total);
+      setNotifications(rows.slice(0, pageSize));
+      setHasMore(rows.length > pageSize);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load notifications');
     } finally {
@@ -147,37 +138,8 @@ export default function NotificationsPage() {
     }
   };
 
-  const getNotificationLink = (notification: Notification): string | null => {
-    if (!notification.links) return null;
-
-    if (notification.type === 'po_status' && notification.links.purchase_order_id) {
-      return `/purchase-orders/${notification.links.purchase_order_id}`;
-    }
-
-    if (
-      (notification.type === 'low_stock' || notification.type === 'out_of_stock') &&
-      notification.links.product_id
-    ) {
-      if (!can(user, 'products.manage')) {
-        const locationId = notification.links.location_id;
-        if (locationId) {
-          return `/stock?product=${notification.links.product_id}&location=${locationId}`;
-        }
-        return `/products/search?q=${encodeURIComponent(
-          notification.title
-            .replace('Low stock: ', '')
-            .replace('Out of stock: ', '')
-            .split(' (')[0],
-        )}`;
-      }
-      const variantPart = notification.links.variant_id
-        ? `/variants/${notification.links.variant_id}`
-        : '';
-      return `/products/${notification.links.product_id}${variantPart}`;
-    }
-
-    return null;
-  };
+  const getNotificationLink = (notification: Notification): string | null =>
+    notificationHref(notification, can(user, 'products.manage'));
 
   const formatRelativeTime = (dateString: string): string => {
     const date = new Date(dateString);
@@ -240,7 +202,7 @@ export default function NotificationsPage() {
       </form>
 
       {loading ? (
-        <p className="loading">Loading notifications?</p>
+        <p className="loading">Loading notifications…</p>
       ) : notifications.length === 0 ? (
         <EmptyState message={filter === 'unread' ? 'All caught up!' : 'No notifications yet.'} />
       ) : (
@@ -289,20 +251,18 @@ export default function NotificationsPage() {
                           {row.type === 'po_status' ? 'View order' : 'View product'}
                         </Link>
                       )}
-                      {row.type !== 'po_status' &&
-                        row.links?.product_id &&
-                        can(user, 'purchase_orders.manage') && (
-                          <>
-                            {' | '}
-                            <Link
-                              to={`/purchase-orders/new?product=${row.links.product_id}&location=${row.links.location_id || ''}&variant=${row.links.variant_id || ''}`}
-                              className="notification-link"
-                              onClick={() => handleLinkClick(row)}
-                            >
-                              Create PO
-                            </Link>
-                          </>
-                        )}
+                      {createPurchaseOrderHref(row) && can(user, 'purchase_orders.manage') && (
+                        <>
+                          {' | '}
+                          <Link
+                            to={createPurchaseOrderHref(row) ?? '/purchase-orders'}
+                            className="notification-link"
+                            onClick={() => handleLinkClick(row)}
+                          >
+                            Create PO
+                          </Link>
+                        </>
+                      )}
                       <div className="notification-controls">
                         {!row.is_read && (
                           <button
@@ -333,7 +293,7 @@ export default function NotificationsPage() {
             emptyMessage="No notifications match these filters."
           />
 
-          {total > pageSize && (
+          {(page > 1 || hasMore) && (
             <nav className="pagination" aria-label="Pagination">
               <button
                 type="button"
@@ -343,12 +303,10 @@ export default function NotificationsPage() {
               >
                 Previous
               </button>
-              <span className="pagination-info">
-                Page {page} of {Math.ceil(total / pageSize)}
-              </span>
+              <span className="pagination-info">Page {page}</span>
               <button
                 type="button"
-                disabled={page * pageSize >= total}
+                disabled={!hasMore}
                 onClick={() => setPage(page + 1)}
                 aria-label="Next page"
               >

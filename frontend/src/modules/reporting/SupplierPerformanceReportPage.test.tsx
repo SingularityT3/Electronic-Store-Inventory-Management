@@ -163,3 +163,40 @@ test('shows loading, error and empty states', async () => {
   renderPage();
   expect(await screen.findByRole('alert')).toHaveTextContent('Report unavailable.');
 });
+
+test('exports the report shown on screen as CSV and PDF', async () => {
+  const exportCalls: string[] = [];
+  const createObjectURL = vi.fn(() => 'blob:export');
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  vi.stubGlobal('URL', { createObjectURL, revokeObjectURL: vi.fn() });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url.startsWith('/api/reporting/supplier-performance/export')) {
+        exportCalls.push(url);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({
+            'Content-Disposition':
+              'attachment; filename="Supplier_Performance_Report_2026-10-31.csv"',
+          }),
+          blob: async () => new Blob(['x']),
+        });
+      }
+      return reply({ date_from: '2026-10-01', date_to: '2026-10-31', suppliers: [supplierA] });
+    }),
+  );
+  const user = userEvent.setup();
+  renderPage();
+
+  await screen.findByRole('region', { name: 'Supplier comparison' });
+  await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+  await user.click(screen.getByRole('button', { name: 'Export PDF' }));
+
+  await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+  expect(exportCalls).toEqual([
+    '/api/reporting/supplier-performance/export?format=csv&date_from=2026-10-01&date_to=2026-10-31',
+    '/api/reporting/supplier-performance/export?format=pdf&date_from=2026-10-01&date_to=2026-10-31',
+  ]);
+});

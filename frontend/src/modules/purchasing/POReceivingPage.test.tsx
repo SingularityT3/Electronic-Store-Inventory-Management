@@ -119,3 +119,52 @@ test('Staff can record a receipt through the PO receiving screen', async () => {
     screen.getByRole('heading', { name: `Receive ${ORDER.po_number} · partially received` }),
   ).toBeInTheDocument();
 });
+
+test('Accept all outstanding fills every line for a complete delivery', async () => {
+  const staff: User = {
+    id: 8,
+    username: 'warehouse-staff',
+    full_name: 'Warehouse Staff',
+    role: 'staff',
+    location_id: 2,
+    permissions: ['purchase_orders.receive'],
+  };
+  const calls: { url: string; init?: RequestInit }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url === '/api/auth/me') return reply(200, staff);
+      if (url === '/api/purchasing/purchase-orders/receivable') return reply(200, [ORDER]);
+      if (url === `/api/purchasing/purchase-orders/${ORDER.id}/receive`) {
+        return reply(200, { ...ORDER, status: 'received' });
+      }
+      return reply(404, { detail: 'Not found' });
+    }),
+  );
+  render(
+    <MemoryRouter
+      initialEntries={['/purchase-orders/receive']}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+
+  const userAction = userEvent.setup();
+  await userAction.click(await screen.findByRole('button', { name: ORDER.po_number }));
+  await userAction.type(screen.getByLabelText('Damaged PHONE-20'), '1');
+  await userAction.click(screen.getByRole('button', { name: 'Accept all outstanding' }));
+  expect(screen.getByLabelText('Accepted PHONE-20')).toHaveValue(2);
+  expect(screen.getByLabelText('Damaged PHONE-20')).toHaveValue(0);
+  await userAction.click(screen.getByRole('button', { name: 'Record receipt' }));
+
+  const receiveCall = calls.find((call) => call.init?.method === 'POST');
+  expect(JSON.parse(String(receiveCall?.init?.body)).lines[0]).toMatchObject({
+    quantity_accepted: 2,
+    quantity_damaged: 0,
+    quantity_short: 0,
+  });
+});

@@ -11,6 +11,9 @@ const GST_RATE = 18;
 
 type CartLine = Availability & {
   quantity: number;
+  /** Serial-tracked items are sold unit by unit (FR-2.5): one serial number per unit. */
+  tracking_mode: Product['tracking_mode'];
+  serials: string;
   discount: number;
   discount_type: 'percentage' | 'amount';
   error?: string;
@@ -20,6 +23,13 @@ interface Location {
   id: number;
   name: string;
   type: string;
+}
+
+function serialList(value: string): string[] {
+  return value
+    .split(/[\s,]+/)
+    .map((serial) => serial.trim())
+    .filter(Boolean);
 }
 
 function amount(value: number) {
@@ -34,6 +44,8 @@ export default function PosPage() {
   const { user } = useAuth();
   const canChooseLocation = user?.role === 'admin' || user?.role === 'manager';
   const [locations, setLocations] = useState<Location[]>([]);
+  // A cashier cannot list locations, so remember the store name from the first search results.
+  const [locationName, setLocationName] = useState('');
   const [locationId, setLocationId] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [availability, setAvailability] = useState<Availability[]>([]);
@@ -90,6 +102,7 @@ export default function PosPage() {
             }),
         );
         if (current) {
+          if (rows[0]) setLocationName(rows[0].location_name);
           setProducts(result.items);
           setAvailability(
             rows.map((row) => ({
@@ -97,6 +110,7 @@ export default function PosPage() {
               unit_price: row.variant_id
                 ? (variantPrices.get(row.variant_id) ?? '0')
                 : (result.items.find((item) => item.id === row.product_id)?.price ?? '0'),
+              tracking_mode: result.items.find((item) => item.id === row.product_id)?.tracking_mode,
             })),
           );
         }
@@ -168,7 +182,17 @@ export default function PosPage() {
             : line,
         );
       }
-      return [...current, { ...row, quantity: 1, discount: 0, discount_type: 'amount' }];
+      return [
+        ...current,
+        {
+          ...row,
+          quantity: 1,
+          discount: 0,
+          discount_type: 'amount',
+          tracking_mode: row.tracking_mode ?? 'untracked',
+          serials: '',
+        },
+      ];
     });
   }
 
@@ -193,6 +217,7 @@ export default function PosPage() {
           quantity: line.quantity,
           discount: line.discount,
           discount_type: line.discount_type,
+          ...(line.tracking_mode === 'serial' ? { serial_numbers: serialList(line.serials) } : {}),
         })),
         payments: [
           {
@@ -206,7 +231,8 @@ export default function PosPage() {
       setSale(result);
       setInvoiceContent(result.invoice.content);
     } catch (cause: unknown) {
-      if (cause instanceof ApiError && cause.status === 409) {
+      // 409: stock problems; 422: e.g. a serial number that is not in stock. Both name the line.
+      if (cause instanceof ApiError && (cause.status === 409 || cause.status === 422)) {
         const messages = cause.fields;
         setCart((current) =>
           current.map((line) => {
@@ -285,7 +311,7 @@ export default function PosPage() {
         <h1>Record sale</h1>
         <p>
           {locations.find((location) => String(location.id) === locationId)?.name ??
-            (locationId ? `Location ${locationId}` : '')}
+            (locationName || (locationId ? 'Your assigned location' : ''))}
         </p>
       </header>
       {canChooseLocation && (
@@ -361,6 +387,26 @@ export default function PosPage() {
                   {line.product_name} {line.variant_sku && `(${line.variant_sku})`}
                 </strong>
                 <span>{money.format(Number(line.unit_price))}</span>
+                {line.tracking_mode === 'serial' && (
+                  <FormField
+                    label="Serial numbers"
+                    hint="Scan or type the serial number of each unit, one per line."
+                  >
+                    {(control) => (
+                      <textarea
+                        {...control}
+                        rows={2}
+                        value={line.serials}
+                        onChange={(event) =>
+                          updateLine(index, {
+                            serials: event.target.value,
+                            quantity: Math.max(serialList(event.target.value).length, 1),
+                          })
+                        }
+                      />
+                    )}
+                  </FormField>
+                )}
                 <FormField label="Quantity" error={line.error}>
                   {(control) => (
                     <input
@@ -369,6 +415,7 @@ export default function PosPage() {
                       min="1"
                       max={line.available_quantity}
                       value={line.quantity}
+                      readOnly={line.tracking_mode === 'serial'}
                       onChange={(event) =>
                         updateLine(index, { quantity: Number(event.target.value) })
                       }

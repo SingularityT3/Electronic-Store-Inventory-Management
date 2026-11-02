@@ -26,6 +26,7 @@ from app.modules.reporting.service import (
     sales_trend_rows,
     sales_trend_table,
     supplier_performance_rows,
+    supplier_performance_table,
     valuation_rows,
     valuation_table,
 )
@@ -215,14 +216,7 @@ def supplier_performance_report(
     date_to: date,
     supplier_ids: Annotated[list[int] | None, Query()] = None,
 ) -> SupplierPerformanceOut:
-    if supplier_ids is not None and (
-        any(supplier_id < 1 for supplier_id in supplier_ids)
-        or len(supplier_ids) != len(set(supplier_ids))
-    ):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Supplier IDs must be positive and unique.",
-        )
+    _supplier_ids(supplier_ids)
     start, end = _report_period(date_from, date_to)
     reports = supplier_performance_rows(db, start=start, end=end, supplier_ids=supplier_ids)
     if supplier_ids is not None and len(reports) != len(supplier_ids):
@@ -266,6 +260,48 @@ def supplier_performance_report(
             for report in reports
         ],
     )
+
+
+def _supplier_ids(supplier_ids: list[int] | None) -> None:
+    if supplier_ids is not None and (
+        any(supplier_id < 1 for supplier_id in supplier_ids)
+        or len(supplier_ids) != len(set(supplier_ids))
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Supplier IDs must be positive and unique.",
+        )
+
+
+@router.get(
+    "/supplier-performance/export", dependencies=[Depends(require(Permission.REPORTS_VIEW))]
+)
+def export_supplier_performance(
+    db: Annotated[Session, Depends(get_session)],
+    export_format: Annotated[ExportFormat, Query(alias="format")],
+    date_from: date,
+    date_to: date,
+    supplier_ids: Annotated[list[int] | None, Query()] = None,
+) -> Response:
+    _supplier_ids(supplier_ids)
+    start, end = _report_period(date_from, date_to)
+    table = supplier_performance_table(db, start=start, end=end, supplier_ids=supplier_ids)
+    if supplier_ids is not None and len(table.rows) != len(supplier_ids):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Supplier not found.")
+    return _file_response(table, export_format)
+
+
+def _file_response(table: ReportTable, export_format: ExportFormat) -> Response:
+    generated_at = datetime.now(UTC)
+    headers = {
+        "Content-Disposition": (
+            f'attachment; filename="{export_filename(table.title, generated_at, export_format)}"'
+        ),
+        "Cache-Control": "no-store",
+    }
+    if export_format == "csv":
+        return StreamingResponse(csv_chunks(table), media_type=CSV_MEDIA_TYPE, headers=headers)
+    return Response(pdf_bytes(table, generated_at), media_type=PDF_MEDIA_TYPE, headers=headers)
 
 
 @router.get("/sales-trend/export", dependencies=[Depends(require(Permission.REPORTS_VIEW))])

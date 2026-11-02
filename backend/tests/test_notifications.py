@@ -247,3 +247,94 @@ def test_notification_feed_respects_role_permissions(client, make_user, db):
     cashier = make_user("notification_feed_cashier", role="cashier", location_id=1)
     assert login(client, cashier.username).status_code == 200
     assert client.get("/api/notifications").status_code == 403
+
+
+def _sell_one(db, product, location) -> None:
+    update_stock(
+        db,
+        product_id=product.id,
+        variant_id=None,
+        location_id=location.id,
+        quantity_delta=-1,
+        movement_type="sale",
+    )
+    db.commit()
+
+
+def _feed(client) -> list[dict]:
+    response = client.get("/api/notifications")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_fr8_1_ut_3_a_notification_can_be_marked_read_and_dismissed(client, make_user, db):
+    product, location, _, _ = create_alert_item(db, quantity=6, threshold=5)
+    manager = make_user("notification_actions_manager", role="manager")
+    other = make_user("notification_actions_other", role="manager")
+    _sell_one(db, product, location)
+    assert login(client, manager.username).status_code == 200
+    [notification] = [row for row in _feed(client) if row["links"]["product_id"] == product.id]
+    assert notification["is_read"] is False
+    assert client.get("/api/notifications/unread-count").json() == {"unread": 1}
+
+    assert client.post(f"/api/notifications/{notification['id']}/read").status_code == 200
+    assert client.get("/api/notifications/unread-count").json() == {"unread": 0}
+    assert [row["is_read"] for row in _feed(client)] == [True]
+    assert client.get("/api/notifications", params={"unread_only": True}).json() == []
+
+    assert client.post(f"/api/notifications/{notification['id']}/dismiss").status_code == 200
+    assert _feed(client) == []
+
+    other_row = db.scalar(select(Notification).where(Notification.recipient_user_id == other.id))
+    assert client.post(f"/api/notifications/{other_row.id}/read").status_code == 404
+    assert client.post(f"/api/notifications/{other_row.id}/dismiss").status_code == 404
+    db.refresh(other_row)
+    assert (other_row.is_read, other_row.dismissed_at) == (False, None)
+
+
+def test_mark_all_read_clears_the_unread_count(client, make_user, db):
+    first, location, _, _ = create_alert_item(db, quantity=6, threshold=5)
+    second, second_location, _, _ = create_alert_item(db, quantity=6, threshold=5)
+    manager = make_user("notification_all_read_manager", role="manager")
+    _sell_one(db, first, location)
+    _sell_one(db, second, second_location)
+    assert login(client, manager.username).status_code == 200
+    assert client.get("/api/notifications/unread-count").json() == {"unread": 2}
+
+    assert client.post("/api/notifications/read-all").status_code == 200
+
+    assert client.get("/api/notifications/unread-count").json() == {"unread": 0}
+    assert len(_feed(client)) == 2
+
+
+def test_fr8_1_st_1_low_stock_notification_persists_across_sessions_until_acted_on(
+    client, make_user, db
+):
+    product, location, _, _ = create_alert_item(db, quantity=6, threshold=5)
+    manager = make_user("notification_persist_manager", role="manager")
+    assert login(client, manager.username).status_code == 200
+    assert _feed(client) == []
+
+    _sell_one(db, product, location)
+    [seen] = _feed(client)
+    assert seen["type"] == "low_stock"
+    assert product.name in seen["title"]
+
+    client.post("/api/auth/logout")
+    assert client.get("/api/notifications").status_code == 401
+    assert login(client, manager.username).status_code == 200
+    assert [row["id"] for row in _feed(client)] == [seen["id"]]
+
+    # Resolving the condition removes it, just as dismissing it would.
+    update_stock(
+        db,
+        product_id=product.id,
+        variant_id=None,
+        location_id=location.id,
+        quantity_delta=10,
+        movement_type="receipt",
+    )
+    db.commit()
+    client.post("/api/auth/logout")
+    assert login(client, manager.username).status_code == 200
+    assert _feed(client) == []

@@ -72,6 +72,13 @@ export const NAV_ITEMS: NavItem[] = [
     deniedLabel: 'stock transfers',
   },
   {
+    path: '/stock/batch-recall',
+    label: 'Batch recall',
+    group: 'Inventory',
+    permission: 'stock.view',
+    deniedLabel: 'batch recall',
+  },
+  {
     path: '/locations',
     label: 'Locations',
     group: 'Inventory',

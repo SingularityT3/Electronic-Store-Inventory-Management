@@ -110,8 +110,22 @@ def pdf_bytes(table: ReportTable, generated_at: datetime) -> bytes:
         pdf.set_font("Helvetica", size=8)
 
     draw_header()
+    # Room for text in each column; a cell that fits is drawn as one line, skipping the
+    # costly wrap measurement (large exports are mostly single-line rows, FR6.5-IT-3).
+    room = [width - 2 * pdf.c_margin for width in widths]
     for row in table.rows:
         texts = [_latin1(cell) for cell in row]
+        if all(
+            "\n" not in text and pdf.get_string_width(text) <= space
+            for text, space in zip(texts, room, strict=True)
+        ):
+            if pdf.will_page_break(line_height):
+                pdf.add_page()
+                draw_header()
+            for text, width in zip(texts, widths, strict=True):
+                pdf.cell(width, line_height, text, border=1)
+            pdf.ln(line_height)
+            continue
         wrapped = [
             pdf.multi_cell(width, line_height, text, dry_run=True, output="LINES")
             for text, width in zip(texts, widths, strict=True)

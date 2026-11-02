@@ -239,6 +239,16 @@ export default function PurchaseOrdersPage() {
     }
   }
 
+  // "View order" from a notification opens /purchase-orders?order=<id>.
+  const orderParam = Number(searchParams.get('order'));
+  useEffect(() => {
+    if (loading || !Number.isSafeInteger(orderParam) || orderParam <= 0) return;
+    if (selected?.id === orderParam) return;
+    void selectOrder({ id: orderParam } as PurchaseOrder);
+    // selectOrder only reads the id; re-run when the requested order or loading changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, orderParam]);
+
   function addCatalogLine() {
     const entry = catalog.find((item) => String(item.id) === catalogChoice);
     if (!entry) return;

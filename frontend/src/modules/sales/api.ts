@@ -11,6 +11,8 @@ export interface Availability {
   location_name: string;
   available_quantity: number;
   unit_price?: string;
+  /** Set by the POS from the product search; serial items need a serial per unit. */
+  tracking_mode?: 'untracked' | 'batch' | 'serial';
 }
 
 export interface Sale {
@@ -154,6 +156,7 @@ export interface DocumentContent {
   cashier_id?: number;
   cashier_name?: string;
   processor_name?: string;
+  approver_username?: string | null;
   customer_name?: string | null;
   gst_rate?: string;
   subtotal?: string;

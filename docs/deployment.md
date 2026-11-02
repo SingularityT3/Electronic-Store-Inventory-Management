@@ -30,7 +30,14 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 Check `https://<SITE_ADDRESS>/api/health` returns `{"status": "ok"}`.
 
-To create the first accounts, see the user-management documentation once it exists. The sample data
+Create the first Admin account (the password is asked for twice and never shown):
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm backend \
+  python -m scripts.create_admin owner "Store Owner" --email owner@example.com
+```
+
+Sign in as that Admin and add locations and the other users from the web app. The sample data
 script (`python -m scripts.seed`) is for development only; do not run it in production.
 
 ### Update
@@ -54,7 +61,7 @@ All configuration is environment variables in `.env.prod` (reference: `.env.prod
 | `COOKIE_SECURE`     | Keep `true`: session cookies are sent over HTTPS only.                                     |
 | `CORS_ORIGINS`      | Leave empty; the SPA and API share one origin.                                             |
 | `LOCKOUT_*`, `SESSION_*` | Login lockout and session timeouts (SRS A-12). Defaults: 5 failures lock for 15 minutes; sessions end after 30 idle minutes or 12 hours. |
-| `SMTP_*`            | Mail server for password reset links. If `SMTP_HOST` is empty, reset emails are not sent and an Admin must reset passwords (#7). |
+| `SMTP_*`            | Mail server for invite and password reset links. If `SMTP_HOST` is empty, no email is sent: set passwords on the server with `python -m scripts.set_password <username>` (see the admin guide). |
 | `PRODUCT_IMAGE_MAX_BYTES` | Maximum upload size in bytes; defaults to 5 MiB, and must be at least 2 MiB for the required product-image test. |
 | `GST_RATE` | Percentage applied to each discounted sale line; defaults to `18` (18% GST). |
 | `STORE_NAME` | Store name printed on invoice and credit note snapshots; defaults to `ESIMS Electronics`. |

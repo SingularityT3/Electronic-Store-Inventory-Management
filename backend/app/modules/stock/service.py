@@ -655,6 +655,23 @@ def restore_serial_stock(
     )
 
 
+def find_batch_ids(db: Session, batch_number: str) -> list[int]:
+    """IDs of every batch with this number, ignoring case, across all products (FR-2.5 recall).
+
+    Batch numbers are unique per item only, so one number can name batches of several products.
+    """
+    number = batch_number.strip()
+    if not number:
+        return []
+    return list(
+        db.scalars(
+            select(Batch.id)
+            .where(func.lower(Batch.batch_number) == number.lower())
+            .order_by(Batch.id)
+        )
+    )
+
+
 def batch_stock_positions(
     db: Session, *, batch_id: int, location_id: int | None = None
 ) -> BatchRecallData | None:

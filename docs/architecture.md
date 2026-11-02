@@ -209,6 +209,12 @@ Customer returns (`POST /api/sales/returns`) run in one atomic database transact
 6. Credit note data: credit note number format `CN-<return_id>` zero-padded. Audit entries `return_processed` and
    (for late returns) `return_late_approved` are recorded atomically.
 
+Batch recall (FR-2.5): `GET /api/sales/batches/recall?batch_number=...` looks a batch up by its
+number (ignoring case; one number can name batches of several products) and returns, for each
+match, where its units are in stock, the PO receipt it came from and every invoice it was sold
+on, net of returns. `GET /api/sales/batches/{id}/recall` is the same for one batch. Both need
+`stock.view`; Staff see their own location only. The Inventory > Batch recall screen uses it.
+
 Invoice and credit note PDF/printable layout is described in #26 below; retention and delete
 protection remains #27, and sales trend report netting remains #31 (net sales subtract
 `return_lines.refund_amount`).
@@ -308,6 +314,12 @@ rows lowest-first, with overlap permitted when the catalog contains fewer than t
 Manager and Admin users may filter by location or aggregate all locations. CSV and PDF exports
 reuse the same full ranked rows and totals as the JSON report.
 
+All four reports export as CSV and PDF (FR-6.5): `/api/reporting/{valuation,reorder}/export`,
+`/api/reporting/sales-trend/export` and `/api/reporting/supplier-performance/export` (one row
+per supplier, with the price trend of each product summarised in the last column). The PDF
+renderer draws a row whose cells all fit on one line directly and only wraps the others, so the
+full 50,000-row valuation PDF takes seconds rather than over a minute (see `performance.md`).
+
 ## User management
 
 Admins manage accounts through `/api/auth/users` (paged list, detail, create, edit,
@@ -352,10 +364,10 @@ service interface (`app.modules.notifications.service`) with:
 - `reevaluate_stock_alert`: called by `stock.update_stock` after every stock delta (sale,
   receipt, return, transfer, adjustment). It creates or updates a `StockAlert` row and manages
   the notification lifecycle in the same transaction:
-  - New alert ? creates one `Notification` per recipient (see below).
-  - Alert resolved (stock above threshold) ? marks active notifications `resolved_at`.
-  - Alert type changes (low ? out of stock) ? resolves old notifications, creates new ones.
-  - Same type, quantity changes ? updates the `message` of active notifications.
+  - New alert -> creates one `Notification` per recipient (see below).
+  - Alert resolved (stock above threshold) -> marks active notifications `resolved_at`.
+  - Alert type changes (low -> out of stock) -> resolves old notifications, creates new ones.
+  - Same type, quantity changes -> updates the `message` of active notifications.
   - Dismissed notifications stay dismissed until a new alert event occurs.
 - `stock_alert_notification_recipients` (in `auth` module, per layer rule 3): determines who
   receives a stock alert at a given location. Admin and Manager receive alerts for all
@@ -366,6 +378,13 @@ service interface (`app.modules.notifications.service`) with:
 - `record_purchase_order_status`: called by `purchasing` when a PO is submitted, partially
   received, fully received, or cancelled. Creates one notification per recipient (users with
   `purchase_orders.manage`).
+
+Each stock-alert notification's `links` carry the product, variant and location plus the
+alert's name, SKU, quantity and threshold. The frontend helpers in
+`frontend/src/modules/notifications/links.ts` turn them into "View product" (`/products/{id}`,
+or `/stock` for Staff) and "Create PO" (`/purchase-orders?product_id=...&quantity=...`, a
+prefilled draft topping stock up to twice the threshold, SRS A-4) links; "View order" opens
+`/purchase-orders?order={id}`. Lists are ordered newest first, ties broken by id.
 
 Deduplication: a partial unique index on
 `(recipient_user_id, reference_type, reference_id) WHERE dismissed_at IS NULL AND resolved_at IS NULL`
