@@ -126,7 +126,7 @@ export function NotificationPanel({ bellRef }: NotificationPanelProps) {
         aria-haspopup="dialog"
         onClick={() => setOpen(!open)}
       >
-        <span aria-hidden="true">??</span>
+        <span aria-hidden="true">{'\u{1F514}'}</span>
         {unreadCount > 0 && (
           <span className="notification-badge" aria-hidden="true">
             {unreadCount > 99 ? '99+' : unreadCount}

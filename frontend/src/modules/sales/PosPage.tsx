@@ -44,6 +44,8 @@ export default function PosPage() {
   const { user } = useAuth();
   const canChooseLocation = user?.role === 'admin' || user?.role === 'manager';
   const [locations, setLocations] = useState<Location[]>([]);
+  // A cashier cannot list locations, so remember the store name from the first search results.
+  const [locationName, setLocationName] = useState('');
   const [locationId, setLocationId] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [availability, setAvailability] = useState<Availability[]>([]);
@@ -100,6 +102,7 @@ export default function PosPage() {
             }),
         );
         if (current) {
+          if (rows[0]) setLocationName(rows[0].location_name);
           setProducts(result.items);
           setAvailability(
             rows.map((row) => ({
@@ -308,8 +311,7 @@ export default function PosPage() {
         <h1>Record sale</h1>
         <p>
           {locations.find((location) => String(location.id) === locationId)?.name ??
-            availability.find((row) => String(row.location_id) === locationId)?.location_name ??
-            (locationId ? 'Your assigned location' : '')}
+            (locationName || (locationId ? 'Your assigned location' : ''))}
         </p>
       </header>
       {canChooseLocation && (
