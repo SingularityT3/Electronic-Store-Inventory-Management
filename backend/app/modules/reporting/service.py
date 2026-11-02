@@ -396,6 +396,76 @@ def sales_trend_table(
     )
 
 
+def _percent(value: Decimal | None) -> str:
+    return "—" if value is None else f"{value:.2f}%"
+
+
+def _price_trend_label(trend: SupplierProductPriceTrend) -> str:
+    if trend.variance is None:
+        change = "one price"
+    else:
+        sign = "+" if trend.variance > 0 else ""
+        percent = "" if trend.variance_percent is None else f" ({sign}{trend.variance_percent}%)"
+        change = f"{sign}{trend.variance:.2f}{percent}"
+    return (
+        f"{trend.sku}: {trend.first_price:.2f} -> {trend.latest_price:.2f}, {change}, "
+        f"{len(trend.price_points)} receipts"
+    )
+
+
+def supplier_performance_table(
+    db: Session,
+    *,
+    start: datetime,
+    end: datetime,
+    supplier_ids: list[int] | None = None,
+) -> ReportTable:
+    """The supplier performance report as an export table (FR-6.4, FR-6.5): one row per supplier."""
+    reports = supplier_performance_rows(db, start=start, end=end, supplier_ids=supplier_ids)
+    filters = {"Date range": f"{start:%Y-%m-%d} to {end.date().isoformat()}"}
+    if supplier_ids:
+        filters["Suppliers"] = ", ".join(report.supplier_name for report in reports)
+    else:
+        filters["Suppliers"] = "All suppliers"
+    return ReportTable(
+        title="Supplier Performance Report",
+        columns=[
+            "Supplier",
+            "Purchase orders",
+            "Total order value",
+            "On-time deliveries",
+            "On-time rate",
+            "Quantity ordered",
+            "Quantity accepted",
+            "Fulfilment accuracy",
+            "Price trend",
+        ],
+        rows=[
+            [
+                report.supplier_name,
+                str(report.purchase_order_count),
+                f"{report.total_order_value:.2f}",
+                f"{report.on_time_delivery_count} of {report.eligible_delivery_count}",
+                _percent(report.on_time_delivery_rate),
+                str(report.quantity_ordered),
+                str(report.quantity_accepted),
+                _percent(report.fulfilment_accuracy),
+                "; ".join(_price_trend_label(trend) for trend in report.price_trends) or "—",
+            ]
+            for report in reports
+        ],
+        filters=filters,
+        summary={
+            "Suppliers": str(len(reports)),
+            "Purchase orders": str(sum(report.purchase_order_count for report in reports)),
+            "Total order value": (
+                f"{sum((report.total_order_value for report in reports), Decimal('0')):.2f}"
+            ),
+        },
+        widths=[2, 1, 1.3, 1.1, 1, 1, 1, 1.1, 4],
+    )
+
+
 def _variant_label(position: StockPosition) -> str:
     attributes = (
         ", ".join(f"{name}: {value}" for name, value in position.variant_attributes.items())

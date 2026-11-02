@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, api } from '../../api';
+import { ApiError, api, downloadFile } from '../../api';
 import { EmptyState, FormField } from '../../shell/components';
 
 interface PricePoint {
@@ -83,6 +83,8 @@ export default function SupplierPerformanceReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestRef = useRef(0);
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const generate = useCallback(async () => {
     if (!dateFrom || !dateTo || dateFrom > dateTo) {
@@ -132,6 +134,25 @@ export default function SupplierPerformanceReportPage() {
   }, [generate]);
 
   const suppliers = report?.suppliers ?? [];
+
+  async function exportReport(format: 'csv' | 'pdf') {
+    if (!report) return;
+    const params = new URLSearchParams({
+      format,
+      date_from: report.date_from,
+      date_to: report.date_to,
+    });
+    selectedSupplierIds.forEach((supplierId) => params.append('supplier_ids', supplierId));
+    setExporting(true);
+    setExportError('');
+    try {
+      await downloadFile(`/reporting/supplier-performance/export?${params.toString()}`);
+    } catch (cause) {
+      setExportError(cause instanceof ApiError ? cause.message : 'Export failed. Try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="page">
@@ -198,6 +219,21 @@ export default function SupplierPerformanceReportPage() {
       )}
       {!loading && !error && suppliers.length === 0 && (
         <EmptyState message="No suppliers are available for this comparison." />
+      )}
+      {!loading && !error && suppliers.length > 0 && (
+        <div role="group" aria-label="Export">
+          <button type="button" disabled={exporting} onClick={() => void exportReport('csv')}>
+            Export CSV
+          </button>{' '}
+          <button type="button" disabled={exporting} onClick={() => void exportReport('pdf')}>
+            Export PDF
+          </button>
+        </div>
+      )}
+      {exportError && (
+        <p role="alert" className="error">
+          {exportError}
+        </p>
       )}
       {!loading && !error && suppliers.length > 0 && (
         <section aria-label="Supplier comparison" className="supplier-performance-grid">
