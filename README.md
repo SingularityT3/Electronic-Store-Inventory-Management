@@ -67,6 +67,12 @@ that table in step with the plan and the test code.
 Performance and load test (10,000 SKUs, concurrent sales, large exports):
 [`docs/performance.md`](docs/performance.md).
 
+Final test reports (filled-in plan in `Documents/Test_Plan_Document.docx`):
+[unit and integration](docs/unit-test-report.md),
+[system validation](docs/system-validation-report.md),
+[code coverage](docs/code-coverage-report.md) and
+[branch coverage](docs/branch-coverage-report.md).
+
 ## Deploy
 
 Production images, HTTPS and cloud / on-premises steps: [`docs/deployment.md`](docs/deployment.md);
