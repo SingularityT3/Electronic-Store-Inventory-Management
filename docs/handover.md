@@ -20,7 +20,7 @@ runs behind Caddy with automatic HTTPS, plus a daily backup job and an uptime mo
 | What | Where |
 | --- | --- |
 | Source code | https://github.com/SingularityT3/Electronic-Store-Inventory-Management (`main`) |
-| Requirements: SRS, security requirements, test plan, use case diagram and flows | [`Documents/`](../Documents) (`*.docx`); SRS section 5 holds the design decisions |
+| Requirements and design: SRS, SAD (architecture and design), security requirements, test plan, use case diagram and flows | [`Documents/`](../Documents) (`*.docx`); SRS Appendix A holds the design decisions |
 | User guides per role | [`docs/guides/`](guides/getting-started.md): [Cashier](guides/cashier.md), [Staff](guides/staff.md), [Manager](guides/manager.md), [Admin](guides/admin.md) |
 | Installation, configuration, first accounts, operations | [`docs/guides/admin-setup.md`](guides/admin-setup.md), [`docs/deployment.md`](deployment.md) |
 | Backups and recovery plan | [`docs/backup-recovery.md`](backup-recovery.md) |
@@ -74,7 +74,7 @@ Done on 2 November 2026 on a clean Docker host:
 
 ## Decisions on open questions
 
-The SRS left these open; they were settled with the team and are recorded in SRS section 5 and
+The SRS left these open; they were settled with the team and are recorded in SRS Appendix A and
 the issues.
 
 | Topic | Decision |

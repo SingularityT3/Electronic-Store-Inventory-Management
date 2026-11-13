@@ -4,6 +4,9 @@ ESIMS is a modular monolith: one FastAPI backend, one React (Vite, TypeScript) f
 PostgreSQL database. It follows the component diagram in `Documents/esims_component_diagram.png`
 and SRS NFR-11 (separate product, stock, sales and reporting concerns).
 
+The formal architecture and design document (component diagram, rationale, sequence diagrams, API design, STRIDE analysis) is
+`Documents/SAD_Electronics_Store_Inventory_Management_System.docx`. This file holds the developer notes kept next to the code.
+
 ## Modules (`backend/app/modules/`)
 
 | Module          | Responsibility                                                          |

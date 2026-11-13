@@ -7,7 +7,7 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).resolve().parent
 ROW = re.compile(r"^\| ((?:FR\d\.\d|SEC-[A-Z]+-\d)-(?:UT|IT|ST)-\d+) \| (\w+) \| (.*?) \| (.*) \|$")
 STATUSES = {"Automated", "Partial", "Manual", "Pending"}
-# Test Plan Document, section 3 summary table.
+# Test Plan Document, section 3 (features to be tested) and section 14 (metrics): cases per module.
 CASES_PER_MODULE = {
     "FR1": 24,
     "FR2": 40,

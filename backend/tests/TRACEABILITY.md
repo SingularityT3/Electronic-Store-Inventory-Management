@@ -15,7 +15,7 @@ Test references are in `backend/tests` unless prefixed `fe:`, which is `frontend
 Totals: 226 cases, 223 automated, 3 manual.
 
 
-## 3.1 Product Management
+## A.1 Product Management
 
 24 cases: 24 automated.
 
@@ -46,7 +46,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR1.3-ST-1 | Automated | `test_sales.py::test_fr1_3_st_1_cashier_sells_a_chosen_variant_at_its_price_and_invoice_shows_it` | Driven through the API: search, variant list, availability, sale, invoice |
 | FR1.3-ST-2 | Automated | `test_variants.py::test_variants_normalize_attributes_and_use_effective_price` ; `test_variants.py::test_duplicate_variant_combination_and_sku_are_field_errors` |  |
 
-## 3.2 Stock Management
+## A.2 Stock Management
 
 40 cases: 39 automated, 1 manual.
 
@@ -93,7 +93,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR2.5-ST-1 | Automated | `test_sales.py::test_fr2_5_st_1_batch_received_on_a_po_is_traceable_through_sales_to_a_recall` | A product is tracked by batch or by serial, not both, so the 5 units are sold one per invoice |
 | FR2.5-ST-2 | Automated | `test_stock_adjustments.py::test_positive_adjustment_increases_stock` ; `test_stock_transfers.py::test_transfer_updates_stock_movements_audit_and_valuation` | Untracked products adjust and transfer with no batch or serial |
 
-## 3.3 Purchasing / Supplier Management
+## A.3 Purchasing / Supplier Management
 
 32 cases: 32 automated.
 
@@ -132,7 +132,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR3.4-ST-1 | Automated | `test_purchase_order_lifecycle.py::test_fr3_4_st_1_manager_compares_supplier_prices_then_orders_from_the_cheaper` |  |
 | FR3.4-ST-2 | Automated | `test_supplier_price_history.py::test_supplier_price_history_is_read_only_and_manager_admin_only` |  |
 
-## 3.4 Sales / Orders
+## A.4 Sales / Orders
 
 24 cases: 24 automated.
 
@@ -163,7 +163,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR4.3-ST-1 | Automated | `test_invoices.py::test_fr4_3_st_1_twenty_parallel_cashiers_get_distinct_invoice_numbers` ; `test_constraints.py::test_invoice_numbers_unique_and_sequential` |  |
 | FR4.3-ST-2 | Automated | `test_invoices.py::test_fr4_3_st_2_invoice_pdf_has_attachment_headers_and_snapshot_text` ; `test_invoices.py::test_fr4_3_st_2_long_invoice_spans_pages_and_credit_note_pdf_is_legible` | Print uses the browser's print dialog on the on-screen invoice; the PDF is checked here |
 
-## 3.5 User Management
+## A.5 User Management
 
 24 cases: 24 automated.
 
@@ -194,7 +194,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR5.3-ST-1 | Automated | `test_audit.py::test_mixed_activity_across_all_roles_is_in_the_trail_in_order` ; `test_audit.py::test_entries_from_every_module_share_one_structure` |  |
 | FR5.3-ST-2 | Automated | `test_audit.py::test_only_admin_can_view_the_log` ; `fe:modules/audit/audit.test.tsx::a non-Admin is denied and the log is never requested` |  |
 
-## 3.6 Reporting and Analytics
+## A.6 Reporting and Analytics
 
 40 cases: 40 automated.
 
@@ -241,7 +241,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR6.5-ST-1 | Automated | `test_reporting_export.py::test_fr6_5_st_1_export_is_denied_where_the_report_is_denied` |  |
 | FR6.5-ST-2 | Automated | `test_reporting_export.py::test_fr6_5_st_2_file_name_has_report_type_and_date` |  |
 
-## 3.7 Search and Filter
+## A.7 Search and Filter
 
 16 cases: 14 automated, 2 manual.
 
@@ -264,7 +264,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR7.2-ST-1 | Manual |  | Timed by `scripts.loadtest` at 10,000 SKUs in the nightly `load-test` workflow, not in pytest; latest results in `docs/performance-results.md` |
 | FR7.2-ST-2 | Automated | `test_product_search.py::test_search_requires_all_roles_and_rejects_long_terms` ; `fe:modules/product/product.test.tsx::product filters and sort are sent with the search term` |  |
 
-## 3.8 Notifications
+## A.8 Notifications
 
 16 cases: 16 automated.
 
@@ -287,7 +287,7 @@ Totals: 226 cases, 223 automated, 3 manual.
 | FR8.2-ST-1 | Automated | `test_purchase_order_lifecycle.py::test_fr8_2_st_1_manager_sees_the_full_po_notification_trail` |  |
 | FR8.2-ST-2 | Automated | `test_purchase_order_lifecycle.py::test_fr8_2_st_2_po_status_notifications_are_not_shown_to_cashiers` ; `test_notifications.py::test_notification_feed_respects_role_permissions` ; `test_rbac.py::test_role_permissions_match_the_matrix` |  |
 
-## 3.9 Security
+## A.9 Security
 
 10 cases: 10 automated.
 

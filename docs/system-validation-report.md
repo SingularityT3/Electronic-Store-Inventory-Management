@@ -14,15 +14,15 @@ needed a browser or a large dataset and were executed separately; their evidence
 
 | Module | Cases | Pass | Fail |
 |---|---:|---:|---:|
-| 3.1 Product Management | 6 | 6 | 0 |
-| 3.2 Stock Management | 10 | 10 | 0 |
-| 3.3 Purchasing / Supplier Management | 8 | 8 | 0 |
-| 3.4 Sales / Orders | 6 | 6 | 0 |
-| 3.5 User Management | 6 | 6 | 0 |
-| 3.6 Reporting and Analytics | 10 | 10 | 0 |
-| 3.7 Search and Filter | 4 | 4 | 0 |
-| 3.8 Notifications | 4 | 4 | 0 |
-| 3.9 Security | 3 | 3 | 0 |
+| A.1 Product Management | 6 | 6 | 0 |
+| A.2 Stock Management | 10 | 10 | 0 |
+| A.3 Purchasing / Supplier Management | 8 | 8 | 0 |
+| A.4 Sales / Orders | 6 | 6 | 0 |
+| A.5 User Management | 6 | 6 | 0 |
+| A.6 Reporting and Analytics | 10 | 10 | 0 |
+| A.7 Search and Filter | 4 | 4 | 0 |
+| A.8 Notifications | 4 | 4 | 0 |
+| A.9 Security | 3 | 3 | 0 |
 | **Total** | **57** | **57** | **0** |
 
 Environment:
@@ -130,12 +130,12 @@ but it is the screen that will slow down first as the catalogue grows.
 
 - **Usability:** an expert review was done on 2026-11-01 (see [`usability/report.md`](usability/report.md)).
   No sessions with real users have been run, so NFR-10 is not validated by users.
-- **Security cases (section 3.9):** all 10 pass, as automated tests. They are included in the totals above.
+- **Security cases (Appendix A.9):** all 10 pass, as automated tests. They are included in the totals above.
 - **Browsers (NFR-9):** the browser check above used Chromium only. Firefox and Edge were not run.
 
 ## System test cases (57)
 
-### 3.1 Product Management
+### A.1 Product Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -146,7 +146,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR1.3-ST-1 | End-to-end verification that variant selection is available and functions correctly in the catalog browsing and sales flow | `backend/tests/test_sales.py::test_fr1_3_st_1_cashier_sells_a_chosen_variant_at_its_price_and_invoice_shows_it` | Pass |
 | FR1.3-ST-2 | Verify variant attribute options (Color, Storage) are configurable and reused consistently across products of the same category | `backend/tests/test_variants.py::test_variants_normalize_attributes_and_use_effective_price`<br>`backend/tests/test_variants.py::test_duplicate_variant_combination_and_sku_are_field_errors` | Pass |
 
-### 3.2 Stock Management
+### A.2 Stock Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -161,7 +161,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR2.5-ST-1 | End-to-end verification of full batch/serial traceability from receipt through sale to a hypothetical recall scenario | `backend/tests/test_sales.py::test_fr2_5_st_1_batch_received_on_a_po_is_traceable_through_sales_to_a_recall` | Pass |
 | FR2.5-ST-2 | Verify batch/serial tracking fields are optional and do not block normal operations for products not configured for tracking | `backend/tests/test_stock_adjustments.py::test_positive_adjustment_increases_stock`<br>`backend/tests/test_stock_transfers.py::test_transfer_updates_stock_movements_audit_and_valuation` | Pass |
 
-### 3.3 Purchasing / Supplier Management
+### A.3 Purchasing / Supplier Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -174,7 +174,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR3.4-ST-1 | End-to-end verification that a Manager can use price history to compare suppliers before creating a new PO for the same product | `backend/tests/test_purchase_order_lifecycle.py::test_fr3_4_st_1_manager_compares_supplier_prices_then_orders_from_the_cheaper` | Pass |
 | FR3.4-ST-2 | Verify pricing history view is accessible to Manager/Admin but not to Cashier or Staff | `backend/tests/test_supplier_price_history.py::test_supplier_price_history_is_read_only_and_manager_admin_only` | Pass |
 
-### 3.4 Sales / Orders
+### A.4 Sales / Orders
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -185,7 +185,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR4.3-ST-1 | End-to-end verification that invoice numbering is sequential/unique across concurrent transactions from multiple cashier terminals | `backend/tests/test_invoices.py::test_fr4_3_st_1_twenty_parallel_cashiers_get_distinct_invoice_numbers`<br>`backend/tests/test_constraints.py::test_invoice_numbers_unique_and_sequential` | Pass |
 | FR4.3-ST-2 | Verify invoice export/print function works correctly and produces a correctly formatted document/printout | `backend/tests/test_invoices.py::test_fr4_3_st_2_invoice_pdf_has_attachment_headers_and_snapshot_text`<br>`backend/tests/test_invoices.py::test_fr4_3_st_2_long_invoice_spans_pages_and_credit_note_pdf_is_legible` | Pass |
 
-### 3.5 User Management
+### A.5 User Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -196,7 +196,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR5.3-ST-1 | End-to-end verification that a full day's mixed activity across all roles produces a complete and accurate audit trail | `backend/tests/test_audit.py::test_mixed_activity_across_all_roles_is_in_the_trail_in_order`<br>`backend/tests/test_audit.py::test_entries_from_every_module_share_one_structure` | Pass |
 | FR5.3-ST-2 | Verify audit log viewing/export is restricted to Admin role only | `backend/tests/test_audit.py::test_only_admin_can_view_the_log`<br>`frontend/src/modules/audit/audit.test.tsx::a non-Admin is denied and the log is never requested` | Pass |
 
-### 3.6 Reporting and Analytics
+### A.6 Reporting and Analytics
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -211,7 +211,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR6.5-ST-1 | End-to-end verification that export functionality respects the same access restrictions as the underlying report | `backend/tests/test_reporting_export.py::test_fr6_5_st_1_export_is_denied_where_the_report_is_denied` | Pass |
 | FR6.5-ST-2 | Verify exported file naming convention is clear and includes report type and date for easy identification | `backend/tests/test_reporting_export.py::test_fr6_5_st_2_file_name_has_report_type_and_date` | Pass |
 
-### 3.7 Search and Filter
+### A.7 Search and Filter
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -220,7 +220,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR7.2-ST-1 | End-to-end verification that filter and sort combinations remain performant and accurate on a large catalog (10000+ SKUs) | `python -m scripts.loadtest` (2026-11-06) plus a combined filter/sort check on the same dataset, see docs/system-validation-report.md | Pass |
 | FR7.2-ST-2 | Verify filter and sort options are available to all authenticated roles that can view the product catalog | `backend/tests/test_product_search.py::test_search_requires_all_roles_and_rejects_long_terms`<br>`frontend/src/modules/product/product.test.tsx::product filters and sort are sent with the search term` | Pass |
 
-### 3.8 Notifications
+### A.8 Notifications
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -229,7 +229,7 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR8.2-ST-1 | End-to-end verification of the full PO lifecycle notification trail from submission through receipt, viewed by the responsible Manager | `backend/tests/test_purchase_order_lifecycle.py::test_fr8_2_st_1_manager_sees_the_full_po_notification_trail` | Pass |
 | FR8.2-ST-2 | Verify order status notifications are relevant to and visible for Manager/Admin roles and not shown to Cashier | `backend/tests/test_purchase_order_lifecycle.py::test_fr8_2_st_2_po_status_notifications_are_not_shown_to_cashiers`<br>`backend/tests/test_notifications.py::test_notification_feed_respects_role_permissions`<br>`backend/tests/test_rbac.py::test_role_permissions_match_the_matrix` | Pass |
 
-### 3.9 Security
+### A.9 Security
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|

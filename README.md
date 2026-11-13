@@ -85,7 +85,7 @@ CI runs lint, tests and builds on every pull request.
 backend/    FastAPI app (app/modules/<module>/ ...), migrations/, scripts/seed.py, tests/
 frontend/   React app (src/modules/ mirrors the backend modules)
 docs/       Architecture, schema and deployment notes
-Documents/  SRS, security requirements, test plan, use cases
+Documents/  SRS, SAD, security requirements, test plan, use cases
 ```
 
 ## Configuration
