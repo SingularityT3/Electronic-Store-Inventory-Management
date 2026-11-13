@@ -67,30 +67,30 @@ Unit cases:
 
 | Module | Cases | Pass | Fail |
 |---|---:|---:|---:|
-| 3.1 Product Management | 9 | 9 | 0 |
-| 3.2 Stock Management | 15 | 15 | 0 |
-| 3.3 Purchasing / Supplier Management | 12 | 12 | 0 |
-| 3.4 Sales / Orders | 9 | 9 | 0 |
-| 3.5 User Management | 9 | 9 | 0 |
-| 3.6 Reporting and Analytics | 15 | 15 | 0 |
-| 3.7 Search and Filter | 6 | 6 | 0 |
-| 3.8 Notifications | 6 | 6 | 0 |
-| 3.9 Security | 2 | 2 | 0 |
+| A.1 Product Management | 9 | 9 | 0 |
+| A.2 Stock Management | 15 | 15 | 0 |
+| A.3 Purchasing / Supplier Management | 12 | 12 | 0 |
+| A.4 Sales / Orders | 9 | 9 | 0 |
+| A.5 User Management | 9 | 9 | 0 |
+| A.6 Reporting and Analytics | 15 | 15 | 0 |
+| A.7 Search and Filter | 6 | 6 | 0 |
+| A.8 Notifications | 6 | 6 | 0 |
+| A.9 Security | 2 | 2 | 0 |
 | **Total** | **83** | **83** | **0** |
 
 Integration cases:
 
 | Module | Cases | Pass | Fail |
 |---|---:|---:|---:|
-| 3.1 Product Management | 9 | 9 | 0 |
-| 3.2 Stock Management | 15 | 15 | 0 |
-| 3.3 Purchasing / Supplier Management | 12 | 12 | 0 |
-| 3.4 Sales / Orders | 9 | 9 | 0 |
-| 3.5 User Management | 9 | 9 | 0 |
-| 3.6 Reporting and Analytics | 15 | 15 | 0 |
-| 3.7 Search and Filter | 6 | 6 | 0 |
-| 3.8 Notifications | 6 | 6 | 0 |
-| 3.9 Security | 5 | 5 | 0 |
+| A.1 Product Management | 9 | 9 | 0 |
+| A.2 Stock Management | 15 | 15 | 0 |
+| A.3 Purchasing / Supplier Management | 12 | 12 | 0 |
+| A.4 Sales / Orders | 9 | 9 | 0 |
+| A.5 User Management | 9 | 9 | 0 |
+| A.6 Reporting and Analytics | 15 | 15 | 0 |
+| A.7 Search and Filter | 6 | 6 | 0 |
+| A.8 Notifications | 6 | 6 | 0 |
+| A.9 Security | 5 | 5 | 0 |
 | **Total** | **86** | **86** | **0** |
 
 ## Test inventory
@@ -175,7 +175,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 
 ## Unit test cases (83)
 
-### 3.1 Product Management
+### A.1 Product Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -189,7 +189,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR1.3-UT-2 | Verify system prevents creating a duplicate variant (same combination of attributes) for the same product | `backend/tests/test_variants.py::test_duplicate_variant_combination_and_sku_are_field_errors`<br>`backend/tests/test_constraints.py::test_duplicate_variant_combination_rejected` | Pass |
 | FR1.3-UT-3 | Verify a variant can be created with a different attribute combination for the same base product | `backend/tests/test_variants.py::test_variants_normalize_attributes_and_use_effective_price` | Pass |
 
-### 3.2 Stock Management
+### A.2 Stock Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -209,7 +209,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR2.5-UT-2 | Verify a unique serial number can be assigned to an individual unit of a serial-tracked product | `backend/tests/test_purchase_order_receiving.py::test_receipt_integrates_batch_and_serial_tracking`<br>`backend/tests/test_batch_serial_tracking.py::test_serial_receipt_sale_and_return_preserve_invoice_trace` | Pass |
 | FR2.5-UT-3 | Verify system rejects entry of a duplicate serial number for the same product | `backend/tests/test_purchase_order_receiving.py::test_duplicate_serial_rolls_back_receipt_and_stock`<br>`backend/tests/test_plan_cases.py::test_fr2_5_ut_3_duplicate_serial_number_is_rejected` | Pass |
 
-### 3.3 Purchasing / Supplier Management
+### A.3 Purchasing / Supplier Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -226,7 +226,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR3.4-UT-2 | Verify multiple pricing history entries accumulate over time for the same supplier/product without overwriting previous entries | `backend/tests/test_supplier_price_history.py::test_receipts_append_price_history_and_filters_keep_supplier_attribution` | Pass |
 | FR3.4-UT-3 | Verify pricing history can be viewed filtered by a specific supplier and product combination | `backend/tests/test_supplier_price_history.py::test_receipts_append_price_history_and_filters_keep_supplier_attribution` | Pass |
 
-### 3.4 Sales / Orders
+### A.4 Sales / Orders
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -240,7 +240,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR4.3-UT-2 | Verify the generated invoice contains all required details: item(s), quantity, unit price, total, tax, date, and cashier ID | `backend/tests/test_invoices.py::test_fr4_3_ut_2_sale_persists_required_invoice_snapshot` | Pass |
 | FR4.3-UT-3 | Verify the invoice total correctly matches the sum of line items plus applicable taxes | `backend/tests/test_invoices.py::test_fr4_3_ut_3_two_item_invoice_total_is_lines_plus_gst`<br>`backend/tests/test_invoices.py::test_fr4_3_ut_3_paise_are_rounded_per_line_and_still_add_up` | Pass |
 
-### 3.5 User Management
+### A.5 User Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -254,7 +254,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR5.3-UT-2 | Verify a data-modifying action (e.g. editing a product price) is recorded in the audit log with before/after values | `backend/tests/test_audit.py::test_price_edit_is_logged_with_old_and_new_value`<br>`frontend/src/modules/audit/audit.test.tsx::entries show who, what and when, with old and new values` | Pass |
 | FR5.3-UT-3 | Verify the audit log can be filtered by a specific user to view all their activity | `backend/tests/test_audit.py::test_filter_by_user_any_case`<br>`frontend/src/modules/audit/audit.test.tsx::filtering by user shows only that user’s entries` | Pass |
 
-### 3.6 Reporting and Analytics
+### A.6 Reporting and Analytics
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -274,7 +274,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR6.5-UT-2 | Verify any given report can be exported successfully as a PDF file | `backend/tests/test_reporting_export.py::test_fr6_5_every_report_exports_in_both_formats` | Pass |
 | FR6.5-UT-3 | Verify special characters (e.g. commas, quotes in product names) are correctly escaped in CSV exports so data columns are not broken | `backend/tests/test_reporting_export.py::test_fr6_5_ut_3_commas_and_quotes_stay_in_one_cell` | Pass |
 
-### 3.7 Search and Filter
+### A.7 Search and Filter
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -285,7 +285,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR7.2-UT-2 | Verify products can be filtered by a price range | `backend/tests/test_product_filters.py::test_category_and_price_range_return_exactly_the_intersection` | Pass |
 | FR7.2-UT-3 | Verify products can be sorted by stock level in ascending and descending order | `backend/tests/test_product_filters.py::test_price_and_stock_sorts_work_both_ways_on_live_data` | Pass |
 
-### 3.8 Notifications
+### A.8 Notifications
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -296,7 +296,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR8.2-UT-2 | Verify a notification is generated when a purchase order status changes to Partially Received or Received | `backend/tests/test_purchase_orders.py::test_receipt_hook_advances_lifecycle_notifies_and_freezes_lines` | Pass |
 | FR8.2-UT-3 | Verify a notification includes the PO number and the new status for clarity | `backend/tests/test_purchase_orders.py::test_create_list_view_edit_and_submit_po_calculates_totals_and_audits` | Pass |
 
-### 3.9 Security
+### A.9 Security
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -305,7 +305,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 
 ## Integration test cases (86)
 
-### 3.1 Product Management
+### A.1 Product Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -319,7 +319,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR1.3-IT-2 | Verify selecting a specific variant during a sales transaction deducts stock from the correct variant only | `backend/tests/test_sales.py::test_fr1_3_it_2_selling_a_variant_deducts_only_that_variant` | Pass |
 | FR1.3-IT-3 | Verify deleting a variant does not affect other variants or the base product record | `backend/tests/test_variants.py::test_variant_stock_is_independent_and_delete_is_soft` | Pass |
 
-### 3.2 Stock Management
+### A.2 Stock Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -339,7 +339,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR2.5-IT-2 | Verify a returned unit's batch/serial number is correctly re-added to available stock and traceable to its original sale | `backend/tests/test_returns.py::test_tracked_items_serial_and_batch_returns` | Pass |
 | FR2.5-IT-3 | Verify a batch recall/lookup can retrieve all units and their sale status belonging to a specific batch | `backend/tests/test_sales.py::test_fr2_5_it_3_batch_lookup_by_number_splits_sold_and_in_stock_units`<br>`backend/tests/test_sales.py::test_batch_lookup_by_number_is_scoped_to_staff_location_and_denied_to_cashier`<br>`frontend/src/modules/stock/BatchRecallPage.test.tsx::looking up a batch number shows stock by location and the invoices it was sold on` | Pass |
 
-### 3.3 Purchasing / Supplier Management
+### A.3 Purchasing / Supplier Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -356,7 +356,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR3.4-IT-2 | Verify pricing history entries are immutable (cannot be edited/deleted) once recorded, preserving historical accuracy | `backend/tests/test_supplier_price_history.py::test_supplier_price_history_is_read_only_and_manager_admin_only`<br>`backend/tests/test_constraints.py::test_supplier_price_history_is_append_only` | Pass |
 | FR3.4-IT-3 | Verify pricing history correctly distinguishes entries by supplier when the same product is sourced from multiple suppliers at different prices | `backend/tests/test_supplier_price_history.py::test_receipts_append_price_history_and_filters_keep_supplier_attribution` | Pass |
 
-### 3.4 Sales / Orders
+### A.4 Sales / Orders
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -370,7 +370,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR4.3-IT-2 | Verify an invoice linked to a later-processed return correctly shows an updated status without altering the original transaction record | `backend/tests/test_invoices.py::test_fr4_3_it_2_partial_return_annotates_the_invoice_without_changing_the_records` | Pass |
 | FR4.3-IT-3 | Verify invoice records are retained and retrievable per the data retention/compliance requirement | `backend/tests/test_invoices.py::test_fr4_3_it_3_history_finds_a_seven_year_old_sale_by_date_and_number`<br>`backend/tests/test_invoices.py::test_fr4_3_it_3_invoice_near_the_end_of_retention_is_retrievable_in_full`<br>`backend/tests/test_retention.py::test_retention_archive_dry_run_then_execute_is_verified_and_repeatable` | Pass |
 
-### 3.5 User Management
+### A.5 User Management
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -384,7 +384,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR5.3-IT-2 | Verify the audit log is immutable - entries cannot be edited or deleted by any user, including Admin | `backend/tests/test_audit.py::test_api_has_no_way_to_change_entries`<br>`backend/tests/test_audit.py::test_admin_cannot_edit_or_delete_an_entry`<br>`backend/tests/test_audit.py::test_database_rejects_changes_made_through_the_orm` | Pass |
 | FR5.3-IT-3 | Verify audit log entries correctly capture failed/denied authorization attempts | `backend/tests/test_rbac.py::test_denied_attempt_is_audited` | Pass |
 
-### 3.6 Reporting and Analytics
+### A.6 Reporting and Analytics
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -404,7 +404,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR6.5-IT-2 | Verify exported PDF reports include a header with report title, generation date, and applied filters for traceability | `backend/tests/test_reporting_export.py::test_fr6_5_it_2_pdf_header_has_title_time_and_filter` | Pass |
 | FR6.5-IT-3 | Verify a large report (5000+ rows) exports successfully without truncation or timeout | `backend/tests/test_reporting_export.py::test_fr6_5_it_3_five_thousand_rows_export_without_truncation` | Pass |
 
-### 3.7 Search and Filter
+### A.7 Search and Filter
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -415,7 +415,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR7.2-IT-2 | Verify sorting by price correctly reflects the most recently updated price values from the Product module | `backend/tests/test_product_filters.py::test_price_and_stock_sorts_work_both_ways_on_live_data` | Pass |
 | FR7.2-IT-3 | Verify filtering by stock level correctly reflects real-time stock data | `backend/tests/test_product_filters.py::test_stock_status_filter_is_scoped_to_the_users_location` | Pass |
 
-### 3.8 Notifications
+### A.8 Notifications
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
@@ -426,7 +426,7 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR8.2-IT-2 | Verify a PO cancellation correctly triggers a corresponding Cancelled status notification | `backend/tests/test_purchase_orders.py::test_cancelled_orders_are_excluded_from_pending_orders` | Pass |
 | FR8.2-IT-3 | Verify order status notifications are timestamped accurately and appear in correct chronological order alongside other notifications | `backend/tests/test_purchase_order_lifecycle.py::test_fr8_2_it_3_status_changes_across_pos_are_listed_in_event_order`<br>`backend/tests/test_notifications.py::test_notification_feed_is_recipient_scoped_and_chronological` | Pass |
 
-### 3.9 Security
+### A.9 Security
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|

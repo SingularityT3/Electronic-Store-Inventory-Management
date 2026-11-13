@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-ESIMS (Electronics Store Inventory Management System): a modular-monolith web app (FastAPI, React + TypeScript with Vite, PostgreSQL). Requirements are in `Documents/*.docx` (SRS, security requirements, test plan, use cases). SRS section 5 "Assumptions and Design Decisions" (A-1..A-12) holds business rules stated nowhere else. Work is tracked as GitHub issues on the project board "Electronics Store Inventory management System"; each issue lists its SRS requirement IDs and dependencies.
+ESIMS (Electronics Store Inventory Management System): a modular-monolith web app (FastAPI, React + TypeScript with Vite, PostgreSQL). Requirements and design are in `Documents/*.docx` (SRS, SAD, security requirements, test plan, use cases). SRS Appendix A "Assumptions and Design Decisions" (A-1..A-12) holds business rules stated nowhere else. Work is tracked as GitHub issues on the project board "Electronics Store Inventory management System"; each issue lists its SRS requirement IDs and dependencies.
 
 ## Commands
 
