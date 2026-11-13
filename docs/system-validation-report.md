@@ -130,7 +130,13 @@ but it is the screen that will slow down first as the catalogue grows.
 
 - **Usability:** an expert review was done on 2026-11-01 (see [`usability/report.md`](usability/report.md)).
   No sessions with real users have been run, so NFR-10 is not validated by users.
-- **Security cases (Appendix A.9):** all 10 pass, as automated tests. They are included in the totals above.
+- **Security cases (Appendix A.9):** all 10 pass. Only the 3 system cases (`SEC-INP-3-ST-1`, `SEC-DAT-6-ST-1`,
+  `SEC-DAT-6-ST-2`) are in the 57 above. The other 7 (2 unit, 5 integration) are in
+  [`unit-test-report.md`](unit-test-report.md).
+- **Security requirement traceability:** most security requirements have no `SEC-*` case of their own and are
+  covered by functional cases (for example SEC-SES-3 by FR5.2-ST-1). See
+  [`security-traceability.md`](security-traceability.md) for every requirement's cases and tests, and for the
+  gaps it found.
 - **Browsers (NFR-9):** the browser check above used Chromium only. Firefox and Edge were not run.
 
 ## System test cases (57)
@@ -230,6 +236,10 @@ but it is the screen that will slow down first as the catalogue grows.
 | FR8.2-ST-2 | Verify order status notifications are relevant to and visible for Manager/Admin roles and not shown to Cashier | `backend/tests/test_purchase_order_lifecycle.py::test_fr8_2_st_2_po_status_notifications_are_not_shown_to_cashiers`<br>`backend/tests/test_notifications.py::test_notification_feed_respects_role_permissions`<br>`backend/tests/test_rbac.py::test_role_permissions_match_the_matrix` | Pass |
 
 ### A.9 Security
+
+Only the 3 system cases of Appendix A.9 appear here; its 7 unit and integration cases are in
+[`unit-test-report.md`](unit-test-report.md). Security requirements without a `SEC-*` case, such as SEC-SES-3,
+are mapped to their functional cases in [`security-traceability.md`](security-traceability.md).
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|

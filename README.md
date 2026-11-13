@@ -70,8 +70,9 @@ Performance and load test (10,000 SKUs, concurrent sales, large exports):
 Final test reports (filled-in plan in `Documents/Test_Plan_Document.docx`):
 [unit and integration](docs/unit-test-report.md),
 [system validation](docs/system-validation-report.md),
-[code coverage](docs/code-coverage-report.md) and
-[branch coverage](docs/branch-coverage-report.md).
+[code coverage](docs/code-coverage-report.md),
+[branch coverage](docs/branch-coverage-report.md) and
+[security requirement traceability](docs/security-traceability.md).
 
 ## Deploy
 

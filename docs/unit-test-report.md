@@ -298,6 +298,10 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 
 ### A.9 Security
 
+This section lists the 2 unit cases of Appendix A.9; the 5 integration cases follow in the integration section and
+the 3 system cases are in [`system-validation-report.md`](system-validation-report.md). Security requirements without a `SEC-*` case are
+mapped to their functional cases in [`security-traceability.md`](security-traceability.md).
+
 | ID | Description | Evidence | Result |
 |---|---|---|---|
 | SEC-AUTH-2-UT-1 | Verify a new password is stored as a salted adaptive hash | `backend/tests/test_auth.py::test_passwords_are_stored_as_salted_hashes` | Pass |
@@ -427,6 +431,10 @@ seed data, architecture, CSRF and similar) that are not tied to one plan case.
 | FR8.2-IT-3 | Verify order status notifications are timestamped accurately and appear in correct chronological order alongside other notifications | `backend/tests/test_purchase_order_lifecycle.py::test_fr8_2_it_3_status_changes_across_pos_are_listed_in_event_order`<br>`backend/tests/test_notifications.py::test_notification_feed_is_recipient_scoped_and_chronological` | Pass |
 
 ### A.9 Security
+
+This section lists the 5 integration cases of Appendix A.9; the 2 unit cases are in the unit section and the
+3 system cases are in [`system-validation-report.md`](system-validation-report.md). Security requirements without a `SEC-*` case are
+mapped to their functional cases in [`security-traceability.md`](security-traceability.md).
 
 | ID | Description | Evidence | Result |
 |---|---|---|---|
